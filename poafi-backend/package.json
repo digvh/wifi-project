@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "dev:worker": "tsx watch src/worker.ts",
+    "start:worker": "node dist/worker.js"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
