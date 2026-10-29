@@ -2,7 +2,8 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../config/database';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requirePlatformAdmin } from '../middleware/auth';
+import { env } from '../config/env';
 import { validate } from '../middleware/validate';
 import { PaymentService } from '../services/payment/PaymentService';
 import { encryptSecret } from '../utils/crypto';
@@ -78,7 +79,12 @@ router.get('/:id/status', async (req, res) => {
 });
 
 // 3. Testing / Simulation endpoint: simulate user entering PIN on their phone
-router.post('/:id/simulate-confirm', async (req, res) => {
+router.post('/:id/simulate-confirm', requireAuth, requirePlatformAdmin, async (req, res) => {
+  // Simulation must never be usable in production; real payment confirmation comes from a verified provider.
+  if (env.NODE_ENV === 'production') {
+    res.status(404).json({ error: 'Not found' });
+    return;
+  }
   try {
     const result = await PaymentService.simulateConfirmation(req.params.id);
     res.json({
