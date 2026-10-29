@@ -25,6 +25,7 @@ export interface CheckoutResponse {
   phoneNumber: string;
   message: string;
   checkoutUrl?: string;
+  accessToken: string;
 }
 
 export interface WebhookResult {
@@ -58,4 +59,3 @@ export interface IPaymentGateway {
    */
   verifyWebhook(payload: any, signature?: string): WebhookResult;
 }
-
