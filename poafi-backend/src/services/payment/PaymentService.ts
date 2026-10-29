@@ -13,14 +13,11 @@ import {
 } from './types';
 
 export class PaymentService {
-  /**
-   * Helper to resolve active gateway for a tenant:
-   * 1. Mode A: Tenant's custom credentials from PaymentConfig (if configured)
-   * 2. Mode B: Platform Master credentials from .env (centralized aggregation)
-   * 3. Fallback: Simulation mode for lab / dev testing
-   */
+  private static hashAccessToken(token: string): string {
+    return crypto.createHash('sha256').update(token).digest('hex');
+  }
+
   private static async getGatewayForTenant(tenantId: string): Promise<AzamPayGateway> {
-    // Check Mode A: Tenant custom merchant keys
     const config = await prisma.paymentConfig.findUnique({
       where: { tenantId },
     });
@@ -41,7 +38,6 @@ export class PaymentService {
       }
     }
 
-    // Check Mode B: Platform Master Merchant Account from .env
     if (env.AZAMPAY_CLIENT_ID && env.AZAMPAY_CLIENT_SECRET) {
       return new AzamPayGateway({
         appName: env.AZAMPAY_APP_NAME || 'POAFI_MASTER',
@@ -52,13 +48,9 @@ export class PaymentService {
       });
     }
 
-    // Default gateway (sandbox / simulation ready for testing)
     return new AzamPayGateway();
   }
 
-  /**
-   * Start a checkout session from captive portal
-   */
   static async initiateCheckout(req: CheckoutRequest): Promise<CheckoutResponse> {
     const pkg = await prisma.package.findUnique({
       where: { id: req.packageId },
@@ -75,13 +67,12 @@ export class PaymentService {
 
     const gateway = await this.getGatewayForTenant(req.tenantId);
     const formattedPhone = gateway.formatTzPhone(req.phoneNumber);
-
-    // Generate unique reconciliation reference
     const timestamp = Date.now().toString().slice(-6);
     const randomHex = crypto.randomBytes(2).toString('hex').toUpperCase();
     const reference = `POAF-${timestamp}-${randomHex}`;
+    const accessToken = crypto.randomBytes(32).toString('base64url');
+    const accessTokenHash = this.hashAccessToken(accessToken);
 
-    // Create pending payment in DB
     const payment = await prisma.payment.create({
       data: {
         tenantId: req.tenantId,
@@ -91,18 +82,26 @@ export class PaymentService {
         provider: req.provider,
         phoneNumber: formattedPhone,
         reference,
+        accessTokenHash,
         status: 'PENDING',
         metadata: JSON.stringify({ clientIp: req.clientIp }),
       },
     });
 
-    // Send USSD push / STK prompt to customer's mobile phone
     const checkoutResult = await gateway.initiateMnoCheckout({
       reference,
       amount: pkg.priceTzs,
       phone: formattedPhone,
       provider: req.provider,
     });
+
+    if (!checkoutResult.success) {
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: { status: 'FAILED' },
+      });
+      throw new Error(checkoutResult.message || 'Payment initiation failed');
+    }
 
     if (checkoutResult.externalId) {
       await prisma.payment.update({
@@ -119,13 +118,11 @@ export class PaymentService {
       provider: req.provider,
       phoneNumber: formattedPhone,
       message: checkoutResult.message,
+      accessToken,
     };
   }
 
-  /**
-   * Fulfill payment upon confirmation (idempotent, thread-safe)
-   */
-  static async fulfillPayment(reference: string, externalId?: string): Promise<{
+  static async fulfillPayment(reference: string, externalId?: string, expectedAmount?: number): Promise<{
     payment: any;
     voucher: any;
     rawCode: string;
@@ -143,52 +140,66 @@ export class PaymentService {
       throw new Error(`Payment with reference '${reference}' not found`);
     }
 
-    // IDEMPOTENCY CHECK: if already fulfilled, return existing voucher safely
-    if (payment.status === 'SUCCESS' && payment.voucher) {
-      const rawCode = decryptSecret(payment.voucher.encryptedCode);
-      return {
-        payment,
-        voucher: payment.voucher,
-        rawCode,
-      };
+    if (expectedAmount !== undefined && expectedAmount !== payment.amount) {
+      throw new Error('Webhook amount does not match the expected payment amount');
     }
 
-    // 1. Generate unique 8-character voucher code
+    if (payment.status === 'SUCCESS' && payment.voucher) {
+      const rawCode = decryptSecret(payment.voucher.encryptedCode);
+      return { payment, voucher: payment.voucher, rawCode };
+    }
+
+    if (payment.status !== 'PENDING') {
+      throw new Error(`Payment is not eligible for fulfillment from status '${payment.status}'`);
+    }
+
     const rawCode = crypto.randomBytes(4).toString('hex').toUpperCase();
     const codeHash = crypto.createHash('sha256').update(rawCode).digest('hex');
     const encryptedCode = encryptSecret(rawCode);
-
     const now = new Date();
     const expiresAt = new Date(now.getTime() + payment.package.durationMinutes * 60 * 1000);
-
-    // 2. Create the voucher record
     const batchId = `MOBILE-PAY-${Date.now()}`;
-    const voucher = await prisma.voucher.create({
-      data: {
-        batchId,
-        tenantId: payment.tenantId,
-        packageId: payment.packageId,
-        codeHash,
-        encryptedCode,
-        status: 'ACTIVE',
-        activatedAt: now,
-        expiresAt,
-        usedByIp: payment.phoneNumber,
-      },
+
+    const result = await prisma.$transaction(async (tx) => {
+      const claimed = await tx.payment.updateMany({
+        where: { id: payment.id, status: 'PENDING' },
+        data: {
+          status: 'SUCCESS',
+          externalId: externalId || payment.externalId,
+          completedAt: now,
+        },
+      });
+
+      if (claimed.count !== 1) {
+        const current = await tx.payment.findUnique({ where: { id: payment.id }, include: { voucher: true } });
+        if (current?.status === 'SUCCESS' && current.voucher) {
+          return { payment: current, voucher: current.voucher };
+        }
+        throw new Error('Payment was already processed by another request');
+      }
+
+      const voucher = await tx.voucher.create({
+        data: {
+          batchId,
+          tenantId: payment.tenantId,
+          packageId: payment.packageId,
+          codeHash,
+          encryptedCode,
+          status: 'ACTIVE',
+          activatedAt: now,
+          expiresAt,
+          usedByIp: payment.phoneNumber,
+        },
+      });
+
+      const updatedPayment = await tx.payment.update({
+        where: { id: payment.id },
+        data: { voucherId: voucher.id },
+      });
+
+      return { payment: updatedPayment, voucher };
     });
 
-    // 3. Update payment status to SUCCESS and link voucher
-    const updatedPayment = await prisma.payment.update({
-      where: { id: payment.id },
-      data: {
-        status: 'SUCCESS',
-        voucherId: voucher.id,
-        externalId: externalId || payment.externalId,
-        completedAt: now,
-      },
-    });
-
-    // 4. Provision on tenant router if online router exists
     try {
       const routerDevice = await prisma.router.findFirst({
         where: { tenantId: payment.tenantId, status: 'ONLINE' },
@@ -214,10 +225,8 @@ export class PaymentService {
       }
     } catch (routerErr) {
       console.error('Auto-provision on router failed after payment:', routerErr);
-      // We do not fail the payment because the voucher is already generated and valid
     }
 
-    // 5. Send automated SMS receipt with voucher code
     try {
       await SmsService.sendVoucherReceipt({
         phone: payment.phoneNumber,
@@ -230,16 +239,9 @@ export class PaymentService {
       console.error('Failed to dispatch SMS receipt:', smsErr);
     }
 
-    return {
-      payment: updatedPayment,
-      voucher,
-      rawCode,
-    };
+    return { payment: result.payment, voucher: result.voucher, rawCode };
   }
 
-  /**
-   * Process incoming Webhook from AzamPay / Telco
-   */
   static async handleWebhook(payload: any, signature?: string): Promise<{ success: boolean; message: string }> {
     const gateway = new AzamPayGateway();
     const result: WebhookResult = gateway.verifyWebhook(payload, signature);
@@ -249,26 +251,24 @@ export class PaymentService {
     }
 
     if (result.status === 'SUCCESS') {
-      await this.fulfillPayment(result.reference, result.externalId);
+      await this.fulfillPayment(result.reference, result.externalId, result.amount);
       return { success: true, message: 'Payment fulfilled successfully' };
-    } else {
-      await prisma.payment.updateMany({
-        where: { reference: result.reference },
-        data: {
-          status: 'FAILED',
-          externalId: result.externalId,
-        },
-      });
-      return { success: true, message: 'Payment marked as failed' };
     }
+
+    await prisma.payment.updateMany({
+      where: { reference: result.reference, status: 'PENDING' },
+      data: {
+        status: 'FAILED',
+        externalId: result.externalId,
+      },
+    });
+    return { success: true, message: 'Payment marked as failed' };
   }
 
-  /**
-   * Get payment status (polled by captive portal)
-   */
-  static async getPaymentStatus(paymentId: string) {
-    const payment = await prisma.payment.findUnique({
-      where: { id: paymentId },
+  static async getPaymentStatus(paymentId: string, accessToken: string) {
+    const tokenHash = this.hashAccessToken(accessToken);
+    const payment = await prisma.payment.findFirst({
+      where: { id: paymentId, accessTokenHash: tokenHash },
       include: {
         package: { select: { name: true, durationMinutes: true, downloadKbps: true, uploadKbps: true } },
         voucher: true,
@@ -291,7 +291,6 @@ export class PaymentService {
       amount: payment.amount,
       currency: payment.currency,
       provider: payment.provider,
-      phoneNumber: payment.phoneNumber,
       packageName: payment.package.name,
       durationMinutes: payment.package.durationMinutes,
       voucherCode,
@@ -300,9 +299,6 @@ export class PaymentService {
     };
   }
 
-  /**
-   * Simulate instant payment confirmation (for testing & development without live gateway)
-   */
   static async simulateConfirmation(paymentId: string) {
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
@@ -315,4 +311,3 @@ export class PaymentService {
     return this.fulfillPayment(payment.reference, `SIM-CONFIRM-${Date.now()}`);
   }
 }
-
