@@ -71,7 +71,10 @@ router.post('/checkout', checkoutLimiter, validate(checkoutSchema), async (req, 
 // 2. Captive Portal polls for payment confirmation
 router.get('/:id/status', async (req, res) => {
   try {
-    const status = await PaymentService.getPaymentStatus(req.params.id);
+    const status = await PaymentService.getPaymentStatus(
+      req.params.id,
+      req.get('x-payment-access-token'),
+    );
     res.json(status);
   } catch (error: any) {
     res.status(404).json({ error: error.message || 'Payment not found' });
