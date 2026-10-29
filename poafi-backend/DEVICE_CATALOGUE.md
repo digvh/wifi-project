@@ -2,7 +2,7 @@
 
 ## Purpose
 
-The catalogue describes network equipment independently from the router-management adapters. It lets operators browse devices by category, model and advertised coverage without claiming that every listed device can already be configured by PoaFi.
+The catalogue describes network equipment independently from router-management adapters. It lets users browse devices by category, model and advertised coverage without claiming that every listed device can already be configured by PoaFi.
 
 ## Categories
 
@@ -29,9 +29,9 @@ The exact value remains available as `coverageMeters`. A range is never inferred
 
 ## Initial verified sample models
 
-The first migration seeds four TP-Link outdoor access points: EAP110-Outdoor, EAP225-Outdoor, EAP610-Outdoor and EAP650-Outdoor. TP-Link's outdoor Wi-Fi comparison publishes maximum ranges of 200m for EAP110-Outdoor and up to 300m on 5 GHz / 200m on 2.4 GHz for EAP225-Outdoor, EAP610-Outdoor and EAP650-Outdoor. See the [manufacturer comparison](https://www.tp-link.com/uk/business-networking/solution/outdoor-wifi/).
+The first migration seeds four TP-Link outdoor access points: EAP110-Outdoor, EAP225-Outdoor, EAP610-Outdoor and EAP650-Outdoor. The sample entries link to manufacturer documentation and should be reviewed against the exact hardware revision before operational planning.
 
-This is an initial verified sample, not a claim that the catalogue already contains every model or every brand. Additional MikroTik, Ruijie/Reyee, Cudy, Comfast, Wavlink, Ubiquiti, Cambium, Grandstream and other models should be added only after checking the exact model and hardware revision against manufacturer documentation.
+This is an initial sample, not a claim that the catalogue already contains every model or brand. Additional MikroTik, Ruijie/Reyee, Cudy, Comfast, Wavlink, Ubiquiti, Cambium, Grandstream and other models should be added only after checking the exact model and hardware revision against manufacturer documentation.
 
 ## API
 
@@ -43,6 +43,11 @@ All routes require the existing bearer-token authentication.
 - `GET /api/device-catalog?search=EAP610` — search brand, model and subcategory
 - `GET /api/device-catalog?coverageBand=101-300m` — filter by derived coverage band
 - `GET /api/device-catalog/categories` — list supported categories
+- `POST /api/device-catalog` — add a model (Platform Admin only)
+- `PUT /api/device-catalog/:id` — update a model (Platform Admin only)
+- `DELETE /api/device-catalog/:id` — delete a model (Platform Admin only)
+
+Write endpoints validate required brand/model/category, environment, numeric specifications, frequency-band values and source URL protocols. Duplicate brand/model pairs return HTTP 409. Only allow-listed catalogue fields are accepted.
 
 ## Database deployment
 
@@ -51,6 +56,7 @@ From `poafi-backend`, apply the additive migration with:
 ```bash
 npx prisma migrate deploy
 npx prisma generate
+npm run build
 ```
 
 The migration creates a new catalogue table and sample records. It does not update or delete existing tenants, routers, packages, vouchers or payments.
