@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "test": "tsx --test src/services/payment/paymentSafety.test.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.10.1",
