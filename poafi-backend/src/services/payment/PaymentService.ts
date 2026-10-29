@@ -76,6 +76,11 @@ export class PaymentService {
     const gateway = await this.getGatewayForTenant(req.tenantId);
     const formattedPhone = gateway.formatTzPhone(req.phoneNumber);
 
+    // Generate a separate secret capability token for the captive portal to poll this payment.
+    // Only its SHA-256 hash is stored; the raw token is returned once at checkout.
+    const statusToken = crypto.randomBytes(32).toString('hex');
+    const statusTokenHash = crypto.createHash('sha256').update(statusToken).digest('hex');
+
     // Generate unique reconciliation reference
     const timestamp = Date.now().toString().slice(-6);
     const randomHex = crypto.randomBytes(2).toString('hex').toUpperCase();
@@ -92,7 +97,7 @@ export class PaymentService {
         phoneNumber: formattedPhone,
         reference,
         status: 'PENDING',
-        metadata: JSON.stringify({ clientIp: req.clientIp }),
+        metadata: JSON.stringify({ clientIp: req.clientIp, statusTokenHash }),
       },
     });
 
@@ -113,6 +118,7 @@ export class PaymentService {
 
     return {
       paymentId: payment.id,
+      statusToken,
       reference,
       status: 'PENDING',
       amount: pkg.priceTzs,
@@ -266,7 +272,11 @@ export class PaymentService {
   /**
    * Get payment status (polled by captive portal)
    */
-  static async getPaymentStatus(paymentId: string) {
+  static async getPaymentStatus(paymentId: string, statusToken: string | undefined) {
+    if (!statusToken || statusToken.length > 256) {
+      throw new Error('Payment not found');
+    }
+
     const payment = await prisma.payment.findUnique({
       where: { id: paymentId },
       include: {
@@ -276,6 +286,28 @@ export class PaymentService {
     });
 
     if (!payment) {
+      throw new Error('Payment not found');
+    }
+
+    let storedStatusTokenHash: string | undefined;
+    try {
+      storedStatusTokenHash = payment.metadata
+        ? JSON.parse(payment.metadata).statusTokenHash
+        : undefined;
+    } catch {
+      // Treat malformed legacy metadata as an invalid payment access token.
+    }
+
+    const suppliedStatusTokenHash = crypto.createHash('sha256').update(statusToken).digest('hex');
+    if (
+      typeof storedStatusTokenHash !== 'string' ||
+      !/^[a-f0-9]{64}$/i.test(storedStatusTokenHash) ||
+      !crypto.timingSafeEqual(
+        Buffer.from(storedStatusTokenHash, 'hex'),
+        Buffer.from(suppliedStatusTokenHash, 'hex'),
+      )
+    ) {
+      // Do not reveal whether a payment ID exists to an unauthorised caller.
       throw new Error('Payment not found');
     }
 
