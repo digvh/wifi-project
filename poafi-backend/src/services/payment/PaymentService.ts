@@ -32,6 +32,8 @@ export class PaymentService {
           apiKey,
           clientSecret: secret,
           isLive: config.isLive,
+          allowSimulation: env.ALLOW_PAYMENT_SIMULATION,
+          nodeEnv: env.NODE_ENV,
         });
       } catch (e) {
         console.error('Failed to decrypt payment credentials, checking master gateway:', e);
@@ -45,10 +47,16 @@ export class PaymentService {
         apiKey: env.AZAMPAY_API_KEY || '',
         clientSecret: env.AZAMPAY_CLIENT_SECRET,
         isLive: env.AZAMPAY_IS_LIVE,
+        allowSimulation: env.ALLOW_PAYMENT_SIMULATION,
+        nodeEnv: env.NODE_ENV,
       });
     }
 
-    return new AzamPayGateway();
+    return new AzamPayGateway({
+      isLive: env.AZAMPAY_IS_LIVE,
+      allowSimulation: env.ALLOW_PAYMENT_SIMULATION,
+      nodeEnv: env.NODE_ENV,
+    });
   }
 
   static async initiateCheckout(req: CheckoutRequest): Promise<CheckoutResponse> {

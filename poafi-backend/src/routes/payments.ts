@@ -2,7 +2,8 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
 import { prisma } from '../config/database';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requirePlatformAdmin } from '../middleware/auth';
+import { isPaymentSimulationAllowed } from '../services/payment/paymentSafety';
 import { validate } from '../middleware/validate';
 import { PaymentService } from '../services/payment/PaymentService';
 import { encryptSecret } from '../utils/crypto';
@@ -69,7 +70,7 @@ router.post('/checkout', checkoutLimiter, validate(checkoutSchema), async (req, 
 // Captive Portal polls for payment confirmation using the per-payment secret returned by checkout.
 router.get('/:id/status', async (req, res) => {
   try {
-    const accessToken = req.header('X-Payment-Access-Token') || req.query.accessToken;
+    const accessToken = req.header('X-Payment-Access-Token');
     if (typeof accessToken !== 'string' || accessToken.length < 32) {
       res.status(401).json({ error: 'Payment access token required' });
       return;
@@ -83,9 +84,9 @@ router.get('/:id/status', async (req, res) => {
 });
 
 // Development-only simulation. It is never allowed when the platform is configured for live payments.
-router.post('/:id/simulate-confirm', async (req, res) => {
+router.post('/:id/simulate-confirm', requireAuth, requirePlatformAdmin, async (req, res) => {
   try {
-    if (env.AZAMPAY_IS_LIVE) {
+    if (!isPaymentSimulationAllowed(env.NODE_ENV, env.ALLOW_PAYMENT_SIMULATION, env.AZAMPAY_IS_LIVE)) {
       res.status(404).json({ error: 'Not found' });
       return;
     }
@@ -103,15 +104,10 @@ router.post('/:id/simulate-confirm', async (req, res) => {
 
 // Public Webhook callback from AzamPay / Telco.
 // Provider-specific authentication must be configured once the provider's documented signing scheme is confirmed.
-router.post('/webhook', async (req, res) => {
-  try {
-    const signature = req.headers['x-azampay-signature'] as string | undefined;
-    const result = await PaymentService.handleWebhook(req.body, signature);
-    res.json(result);
-  } catch (error: any) {
-    console.error('Payment webhook error:', error);
-    res.status(400).json({ error: error.message || 'Webhook processing failed' });
-  }
+router.post('/webhook', (req, res) => {
+  // Fail closed: this provider integration has no verified callback-authentication implementation yet.
+  // Do not process untrusted callback payloads into payment success or voucher issuance.
+  res.status(503).json({ error: 'Payment callback verification is not configured' });
 });
 
 router.get('/', requireAuth, async (req, res) => {
