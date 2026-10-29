@@ -6,10 +6,10 @@ import { requireAuth } from '../middleware/auth';
 import { validate } from '../middleware/validate';
 import { PaymentService } from '../services/payment/PaymentService';
 import { encryptSecret } from '../utils/crypto';
+import { env } from '../config/env';
 
 const router = Router();
 
-// Rate limiter for checkout attempts (max 15 per 15 min per IP)
 const checkoutLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -36,7 +36,6 @@ const configSchema = z.object({
   isLive: z.boolean().default(false),
 });
 
-// 1. Customer initiates Mobile Money payment from Captive Portal
 router.post('/checkout', checkoutLimiter, validate(checkoutSchema), async (req, res) => {
   try {
     const { tenantSlug, packageId, phoneNumber, provider } = req.body;
@@ -67,19 +66,30 @@ router.post('/checkout', checkoutLimiter, validate(checkoutSchema), async (req, 
   }
 });
 
-// 2. Captive Portal polls for payment confirmation
+// Captive Portal polls for payment confirmation using the per-payment secret returned by checkout.
 router.get('/:id/status', async (req, res) => {
   try {
-    const status = await PaymentService.getPaymentStatus(req.params.id);
+    const accessToken = req.header('X-Payment-Access-Token') || req.query.accessToken;
+    if (typeof accessToken !== 'string' || accessToken.length < 32) {
+      res.status(401).json({ error: 'Payment access token required' });
+      return;
+    }
+
+    const status = await PaymentService.getPaymentStatus(req.params.id, accessToken);
     res.json(status);
   } catch (error: any) {
     res.status(404).json({ error: error.message || 'Payment not found' });
   }
 });
 
-// 3. Testing / Simulation endpoint: simulate user entering PIN on their phone
+// Development-only simulation. It is never allowed when the platform is configured for live payments.
 router.post('/:id/simulate-confirm', async (req, res) => {
   try {
+    if (env.AZAMPAY_IS_LIVE) {
+      res.status(404).json({ error: 'Not found' });
+      return;
+    }
+
     const result = await PaymentService.simulateConfirmation(req.params.id);
     res.json({
       message: 'Payment confirmed and Wi-Fi access provisioned!',
@@ -91,7 +101,8 @@ router.post('/:id/simulate-confirm', async (req, res) => {
   }
 });
 
-// 4. Public Webhook callback from AzamPay / Telco
+// Public Webhook callback from AzamPay / Telco.
+// Provider-specific authentication must be configured once the provider's documented signing scheme is confirmed.
 router.post('/webhook', async (req, res) => {
   try {
     const signature = req.headers['x-azampay-signature'] as string | undefined;
@@ -103,7 +114,6 @@ router.post('/webhook', async (req, res) => {
   }
 });
 
-// 5. Operator / Admin: View payment transactions with pagination & revenue totals
 router.get('/', requireAuth, async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
@@ -164,7 +174,6 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// 6. Save Payment Gateway configuration
 router.post('/config', requireAuth, validate(configSchema), async (req, res) => {
   try {
     const { tenantId, provider, appName, clientId, apiKey, clientSecret, webhookSecret, isLive } = req.body;
@@ -177,7 +186,7 @@ router.post('/config', requireAuth, validate(configSchema), async (req, res) => 
     const encryptedApiKey = apiKey ? encryptSecret(apiKey) : undefined;
     const encryptedSecret = clientSecret ? encryptSecret(clientSecret) : undefined;
 
-    const config = await prisma.paymentConfig.upsert({
+    await prisma.paymentConfig.upsert({
       where: { tenantId },
       create: {
         tenantId,
@@ -207,4 +216,3 @@ router.post('/config', requireAuth, validate(configSchema), async (req, res) => 
 });
 
 export default router;
-
