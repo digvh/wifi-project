@@ -1,4 +1,5 @@
 import { IPaymentGateway, PaymentProvider, WebhookResult } from './types';
+import { isPaymentSimulationAllowed } from './paymentSafety';
 
 export interface AzamPayConfig {
   appName?: string;
@@ -6,6 +7,8 @@ export interface AzamPayConfig {
   apiKey?: string;
   clientSecret?: string;
   isLive?: boolean;
+  allowSimulation?: boolean;
+  nodeEnv?: string;
 }
 
 export class AzamPayGateway implements IPaymentGateway {
@@ -141,29 +144,25 @@ export class AzamPayGateway implements IPaymentGateway {
       }
     }
 
-    // In Sandbox / Dev mode (without live keys yet):
-    // Simulate instant prompt delivery so operators and developers can test full Wi-Fi voucher provisioning
+    // Fail closed unless simulation was explicitly enabled for a non-production environment.
+    if (!isPaymentSimulationAllowed(this.config.nodeEnv, this.config.allowSimulation === true, this.config.isLive === true)) {
+      return {
+        success: false,
+        message: 'Payment gateway is not configured. No payment request was sent.',
+      };
+    }
+
     return {
       success: true,
       externalId: `AZAM-SIM-${Date.now()}`,
-      message: `Payment prompt sent to ${formattedPhone}. Enter your ${options.provider} PIN on your phone to confirm TZS ${options.amount.toLocaleString()}.`,
+      message: `SIMULATION ONLY: no real payment request was sent for TZS ${options.amount.toLocaleString()}.`,
     };
   }
 
-  verifyWebhook(payload: any, signature?: string): WebhookResult {
-    const status =
-      payload.transactionStatus?.toLowerCase() === 'success' ||
-      payload.status?.toLowerCase() === 'success'
-        ? 'SUCCESS'
-        : 'FAILED';
-
-    return {
-      reference: payload.reference || payload.externalId || payload.transId,
-      externalId: payload.transactionId || payload.id,
-      status,
-      amount: parseInt(payload.amount) || 0,
-      rawPayload: payload,
-    };
+  verifyWebhook(_payload: any, _signature?: string): WebhookResult {
+    // The current integration has no verified AzamPay callback-authentication implementation.
+    // Never trust status fields from an unauthenticated public request.
+    throw new Error('Payment callback verification is not configured');
   }
 }
 
