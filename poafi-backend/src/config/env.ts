@@ -3,6 +3,8 @@ dotenv.config();
 import { z } from 'zod';
 
 const envSchema = z.object({
+  NODE_ENV: z.string().default('development'),
+  ALLOW_PAYMENT_SIMULATION: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(false),
   PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string(),
   JWT_SECRET: z.string(),
