@@ -150,20 +150,12 @@ export class AzamPayGateway implements IPaymentGateway {
     };
   }
 
-  verifyWebhook(payload: any, signature?: string): WebhookResult {
-    const status =
-      payload.transactionStatus?.toLowerCase() === 'success' ||
-      payload.status?.toLowerCase() === 'success'
-        ? 'SUCCESS'
-        : 'FAILED';
-
-    return {
-      reference: payload.reference || payload.externalId || payload.transId,
-      externalId: payload.transactionId || payload.id,
-      status,
-      amount: parseInt(payload.amount) || 0,
-      rawPayload: payload,
-    };
+  verifyWebhook(_payload: any, _signature?: string): WebhookResult {
+    // Fail closed: this project has not yet implemented AzamPay's documented
+    // signature/authentication verification. Never trust a client-supplied status
+    // to fulfill a payment. Replace this guard only after implementing and testing
+    // the provider's official verification scheme.
+    throw new Error('Payment webhook verification is not configured; callback rejected');
   }
 }
 
