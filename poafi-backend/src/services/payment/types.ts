@@ -18,6 +18,8 @@ export interface CheckoutRequest {
 
 export interface CheckoutResponse {
   paymentId: string;
+  /** Secret capability token required to poll this payment status. */
+  statusToken: string;
   reference: string;
   status: PaymentStatus;
   amount: number;
