@@ -27,6 +27,10 @@ export const createTenantLoginSchema = z.object({
 export const createRouterSchema = z.object({
   tenantId: z.string().uuid('Invalid tenant ID').optional(),
   deviceModelId: z.string().uuid('Invalid device model ID').optional().nullable(),
+  siteName: z.string().max(120).optional().nullable(),
+  installationAddress: z.string().max(500).optional().nullable(),
+  connectionMode: z.enum(['DIRECT', 'VPN', 'SECURE_TUNNEL', 'CLOUD_CONTROLLER']).default('DIRECT'),
+  installationNotes: z.string().max(2000).optional().nullable(),
   name: z.string().min(1, 'Router name is required').max(100),
   host: z.string().min(1, 'Host is required'),
   apiPort: z.coerce.number().int().min(1).max(65535).default(8728),
@@ -37,6 +41,11 @@ export const createRouterSchema = z.object({
 
 export const updateRouterSchema = z.object({
   deviceModelId: z.string().uuid('Invalid device model ID').optional().nullable(),
+  siteName: z.string().max(120).optional().nullable(),
+  installationAddress: z.string().max(500).optional().nullable(),
+  connectionMode: z.enum(['DIRECT', 'VPN', 'SECURE_TUNNEL', 'CLOUD_CONTROLLER']).optional(),
+  setupStatus: z.enum(['PENDING', 'IN_PROGRESS', 'CONFIGURED', 'NEEDS_ATTENTION']).optional(),
+  installationNotes: z.string().max(2000).optional().nullable(),
   name: z.string().min(1).max(100).optional(),
   host: z.string().min(1).optional(),
   apiPort: z.coerce.number().int().min(1).max(65535).optional(),
