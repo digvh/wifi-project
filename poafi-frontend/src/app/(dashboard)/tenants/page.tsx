@@ -108,17 +108,6 @@ export default function TenantsPage() {
                     ))}
                     {(!t.users || t.users.length === 0) && <p className="text-xs text-amber-400">No login account registered</p>}
                   </div>
-                  <div className="mt-2 space-y-1">
-                    {(t.users || []).map((account: any) => (
-                      <div key={account.id} className="flex items-center gap-2 text-xs text-gray-300">
-                        <span>{account.email} ({account.role})</span>
-                        <button onClick={() => handleDeleteLogin(t.id, account.id, account.email)} className="text-red-400 hover:text-red-300" title="Delete this login account">
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    ))}
-                    {(!t.users || t.users.length === 0) && <p className="text-xs text-amber-400">No login account registered</p>}
-                  </div>
                 </div>
                 <div className="flex gap-2 w-full sm:w-auto">
                   <button onClick={() => { setLoginTenantId(t.id); setLoginSuccess(""); }} className="flex-1 sm:flex-none bg-white/10 hover:bg-white/20 text-white px-3 py-2 rounded-lg flex items-center justify-center gap-2">
