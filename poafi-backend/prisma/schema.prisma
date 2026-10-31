@@ -42,8 +42,11 @@ model Router {
   
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   packages          Package[]
+  deviceModel       NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
+  deviceModelId     String?
 
   @@index([tenantId])
+  @@index([deviceModelId])
 }
 
 
@@ -69,6 +72,7 @@ model NetworkDeviceModel {
   sourceUrl          String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+  routers            Router[]
 
   @@unique([brand, model])
   @@index([category])
