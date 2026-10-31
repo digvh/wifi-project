@@ -188,7 +188,7 @@ export default function RoutersPage() {
         <div>
           <h1 className="text-3xl font-bold">Network Gateways & Routers</h1>
           <p className="text-gray-400 text-sm mt-1">
-            Universal compatibility with MikroTik, TP-Link Omada, Ruijie Reyee, Cudy, Comfast & Wavlink.
+            Register and assign physical network devices to Operators. MikroTik has a live API adapter; other vendor integrations are not yet active.
           </p>
         </div>
       </div>
