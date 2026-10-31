@@ -200,7 +200,9 @@ router.post('/:id/test', async (req, res) => {
 
       await prisma.router.update({
         where: { id: routerDevice.id },
-        data: { status: 'ONLINE', setupStatus: 'CONFIGURED' },
+        // A successful API login proves reachability only. It does not mean Wi-Fi,
+        // hotspot, VLAN, SSID or security configuration has been provisioned.
+        data: { status: 'ONLINE' },
       });
 
       res.json({ message: 'Connection successful', data: result });

@@ -148,7 +148,7 @@ export class MikroTikAdapter implements IRouterAdapter {
       }));
     } catch (error: any) {
       console.error('MikroTik listActiveSessions error:', error);
-      return [];
+      throw new Error(`Failed to retrieve MikroTik active sessions: ${error.message || error}`);
     } finally {
       await api.close().catch(() => {});
     }
