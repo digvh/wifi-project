@@ -44,6 +44,11 @@ model Router {
   packages          Package[]
   deviceModel       NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
   deviceModelId     String?
+  siteName          String?
+  installationAddress String?
+  connectionMode    String   @default("DIRECT")
+  setupStatus       String   @default("PENDING")
+  installationNotes String?
 
   @@index([tenantId])
   @@index([deviceModelId])
