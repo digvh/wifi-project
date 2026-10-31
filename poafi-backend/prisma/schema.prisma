@@ -46,6 +46,36 @@ model Router {
   @@index([tenantId])
 }
 
+
+model NetworkDeviceModel {
+  id                 String   @id @default(uuid())
+  brand              String
+  model              String
+  category           String
+  subcategory        String?
+  environment        String   @default("INDOOR")
+  coverageMeters     Int?
+  coverageNote       String?
+  frequencyBands     String[] @default([])
+  wifiStandard       String?
+  maxClients         Int?
+  maxSpeedMbps       Int?
+  antenna            String?
+  poe                String?
+  ipRating           String?
+  managementPlatform String?
+  hotspotSupport     Boolean  @default(false)
+  notes              String?
+  sourceUrl          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@unique([brand, model])
+  @@index([category])
+  @@index([brand])
+  @@index([coverageMeters])
+}
+
 model Package {
   id              String    @id @default(uuid())
   tenantId        String

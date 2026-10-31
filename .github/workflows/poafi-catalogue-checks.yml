@@ -1,0 +1,53 @@
+name: PoaFi catalogue checks
+
+on:
+  pull_request:
+    branches: [main, master]
+    paths:
+      - "poafi-backend/**"
+      - "poafi-frontend/**"
+      - ".github/workflows/poafi-catalogue-checks.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend TypeScript and Prisma validation
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: poafi-backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/poafi_ci?schema=public
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: poafi-backend/package-lock.json
+      - run: npm ci
+      - name: Validate Prisma schema
+        run: npx prisma validate
+      - name: Generate Prisma client
+        run: npx prisma generate
+      - name: Compile backend
+        run: npm run build
+
+  frontend:
+    name: Frontend production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: poafi-frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: poafi-frontend/package-lock.json
+      - run: npm ci
+      - run: npm run build
