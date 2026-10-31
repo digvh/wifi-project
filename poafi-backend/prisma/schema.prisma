@@ -42,8 +42,47 @@ model Router {
   
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   packages          Package[]
+  deviceModel       NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
+  deviceModelId     String?
+  siteName          String?
+  installationAddress String?
+  connectionMode    String   @default("DIRECT")
+  setupStatus       String   @default("PENDING")
+  installationNotes String?
 
   @@index([tenantId])
+  @@index([deviceModelId])
+}
+
+
+model NetworkDeviceModel {
+  id                 String   @id @default(uuid())
+  brand              String
+  model              String
+  category           String
+  subcategory        String?
+  environment        String   @default("INDOOR")
+  coverageMeters     Int?
+  coverageNote       String?
+  frequencyBands     String[] @default([])
+  wifiStandard       String?
+  maxClients         Int?
+  maxSpeedMbps       Int?
+  antenna            String?
+  poe                String?
+  ipRating           String?
+  managementPlatform String?
+  hotspotSupport     Boolean  @default(false)
+  notes              String?
+  sourceUrl          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  routers            Router[]
+
+  @@unique([brand, model])
+  @@index([category])
+  @@index([brand])
+  @@index([coverageMeters])
 }
 
 model Package {

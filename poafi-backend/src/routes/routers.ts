@@ -12,7 +12,7 @@ router.use(requireAuth);
 // Create a new Router
 router.post('/', validate(createRouterSchema), async (req, res) => {
   try {
-    const { tenantId, name, host, apiPort, username, password, vendor } = req.body;
+    const { tenantId, deviceModelId, siteName, installationAddress, connectionMode, installationNotes, name, host, apiPort, username, password, vendor } = req.body;
 
     const targetTenantId = req.user?.role === 'PLATFORM_ADMIN'
       ? (tenantId || req.user?.tenantId)
@@ -23,11 +23,21 @@ router.post('/', validate(createRouterSchema), async (req, res) => {
       return;
     }
 
+    if (deviceModelId) {
+      const model = await prisma.networkDeviceModel.findUnique({ where: { id: deviceModelId } });
+      if (!model) { res.status(400).json({ error: 'Selected device model was not found in the catalogue' }); return; }
+    }
+
     const encryptedPassword = encryptSecret(password);
 
     const newRouter = await prisma.router.create({
       data: {
         tenantId: targetTenantId,
+        deviceModelId: deviceModelId || null,
+        siteName: siteName || null,
+        installationAddress: installationAddress || null,
+        connectionMode: connectionMode || 'DIRECT',
+        installationNotes: installationNotes || null,
         name,
         host,
         apiPort: apiPort ? parseInt(apiPort) : 8728,
@@ -63,7 +73,7 @@ router.get('/', async (req, res) => {
     const [routers, total] = await Promise.all([
       prisma.router.findMany({
         where: whereClause,
-        include: { tenant: { select: { name: true, slug: true } } },
+        include: { tenant: { select: { name: true, slug: true } }, deviceModel: { select: { id: true, brand: true, model: true, category: true } } },
         orderBy: { name: 'asc' },
         skip,
         take: limit,
@@ -91,7 +101,7 @@ router.get('/', async (req, res) => {
 router.put('/:id', validate(updateRouterSchema), async (req, res) => {
   try {
     const routerId = req.params.id;
-    const { name, host, apiPort, username, password, vendor, status } = req.body;
+    const { deviceModelId, siteName, installationAddress, connectionMode, setupStatus, installationNotes, name, host, apiPort, username, password, vendor, status } = req.body;
 
     const existingRouter = await prisma.router.findUnique({ where: { id: routerId } });
     if (!existingRouter) {
@@ -104,7 +114,18 @@ router.put('/:id', validate(updateRouterSchema), async (req, res) => {
       return;
     }
 
+    if (deviceModelId) {
+      const model = await prisma.networkDeviceModel.findUnique({ where: { id: deviceModelId } });
+      if (!model) { res.status(400).json({ error: 'Selected device model was not found in the catalogue' }); return; }
+    }
+
     const updateData: any = {};
+    if (deviceModelId !== undefined) updateData.deviceModelId = deviceModelId || null;
+    if (siteName !== undefined) updateData.siteName = siteName;
+    if (installationAddress !== undefined) updateData.installationAddress = installationAddress;
+    if (connectionMode !== undefined) updateData.connectionMode = connectionMode;
+    if (setupStatus !== undefined) updateData.setupStatus = setupStatus;
+    if (installationNotes !== undefined) updateData.installationNotes = installationNotes;
     if (name !== undefined) updateData.name = name;
     if (host !== undefined) updateData.host = host;
     if (apiPort !== undefined) updateData.apiPort = parseInt(apiPort);
@@ -179,14 +200,14 @@ router.post('/:id/test', async (req, res) => {
 
       await prisma.router.update({
         where: { id: routerDevice.id },
-        data: { status: 'ONLINE' },
+        data: { status: 'ONLINE', setupStatus: 'CONFIGURED' },
       });
 
       res.json({ message: 'Connection successful', data: result });
     } catch (error: any) {
       await prisma.router.update({
         where: { id: routerDevice.id },
-        data: { status: 'ERROR' },
+        data: { status: 'ERROR', setupStatus: 'NEEDS_ATTENTION' },
       });
       res.status(400).json({ error: error.message || 'Connection failed' });
     }

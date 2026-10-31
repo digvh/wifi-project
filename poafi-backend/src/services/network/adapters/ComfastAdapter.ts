@@ -16,33 +16,22 @@ export class ComfastAdapter implements IRouterAdapter {
   constructor(private readonly config: RouterConnectionConfig) {}
 
   async testConnection(): Promise<RouterTestResult> {
-    try {
-      return {
-        connected: true,
-        vendor: 'COMFAST',
-        identity: `Comfast AP/Gateway (${this.config.host})`,
-        version: 'OrangeOS / OpenWRT Firmware',
-        model: 'Comfast CF Series High Power',
-      };
-    } catch (error: any) {
-      throw new Error(`Comfast connection failed: ${error.message}`);
-    }
+    throw new Error('Comfast live API connection is not implemented. This device has NOT been verified as connected.');
   }
 
-  async provisionUser(options: ProvisionUserOptions): Promise<boolean> {
-    return true;
+  async provisionUser(_options: ProvisionUserOptions): Promise<boolean> {
+    throw new Error('Comfast hotspot voucher provisioning is not implemented yet.');
   }
 
-  async removeUser(username: string): Promise<boolean> {
-    return true;
+  async removeUser(_username: string): Promise<boolean> {
+    throw new Error('Comfast hotspot user removal is not implemented yet.');
   }
 
   async listActiveSessions(): Promise<ActiveSession[]> {
-    return [];
+    throw new Error('Comfast active-session retrieval is not implemented yet.');
   }
 
-  async disconnectSession(usernameOrId: string): Promise<boolean> {
-    return true;
-  }
-}
+  async disconnectSession(_usernameOrId: string): Promise<boolean> {
+    throw new Error('Comfast session disconnection is not implemented yet.');
+  }}
 

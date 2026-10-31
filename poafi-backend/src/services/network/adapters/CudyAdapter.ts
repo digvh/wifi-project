@@ -16,33 +16,22 @@ export class CudyAdapter implements IRouterAdapter {
   constructor(private readonly config: RouterConnectionConfig) {}
 
   async testConnection(): Promise<RouterTestResult> {
-    try {
-      return {
-        connected: true,
-        vendor: 'CUDY',
-        identity: `Cudy Device (${this.config.host})`,
-        version: 'CudyOS',
-        model: 'Cudy Gigabit Router / AP',
-      };
-    } catch (error: any) {
-      throw new Error(`Cudy connection failed: ${error.message}`);
-    }
+    throw new Error('Cudy live API connection is not implemented. This device has NOT been verified as connected.');
   }
 
-  async provisionUser(options: ProvisionUserOptions): Promise<boolean> {
-    return true;
+  async provisionUser(_options: ProvisionUserOptions): Promise<boolean> {
+    throw new Error('Cudy hotspot voucher provisioning is not implemented yet.');
   }
 
-  async removeUser(username: string): Promise<boolean> {
-    return true;
+  async removeUser(_username: string): Promise<boolean> {
+    throw new Error('Cudy hotspot user removal is not implemented yet.');
   }
 
   async listActiveSessions(): Promise<ActiveSession[]> {
-    return [];
+    throw new Error('Cudy active-session retrieval is not implemented yet.');
   }
 
-  async disconnectSession(usernameOrId: string): Promise<boolean> {
-    return true;
-  }
-}
+  async disconnectSession(_usernameOrId: string): Promise<boolean> {
+    throw new Error('Cudy session disconnection is not implemented yet.');
+  }}
 

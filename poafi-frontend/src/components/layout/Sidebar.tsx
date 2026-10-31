@@ -10,7 +10,8 @@ import {
   CreditCard, 
   Package, 
   ClipboardCheck,
-  Globe
+  Globe,
+  Network
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -24,12 +25,14 @@ export default function Sidebar() {
     { name: "Operator Applications", href: "/applications", icon: ClipboardCheck },
     { name: "Operators (Tenants)", href: "/tenants", icon: Users },
     { name: "Routers & Gateways", href: "/routers", icon: Router },
+    { name: "Device Catalogue", href: "/device-catalog", icon: Network },
     { name: "System Billing", href: "/billing", icon: CreditCard },
   ];
 
   const operatorLinks = [
     { name: "My Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "My Routers", href: "/routers", icon: Router },
+    { name: "Device Catalogue", href: "/device-catalog", icon: Network },
     { name: "My Packages", href: "/packages", icon: Package },
     { name: "My Vouchers", href: "/vouchers", icon: Ticket },
     { name: "Revenue & Payments", href: "/billing", icon: CreditCard },

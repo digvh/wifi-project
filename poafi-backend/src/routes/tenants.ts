@@ -23,6 +23,7 @@ router.get('/', async (req, res) => {
         skip,
         take: limit,
         include: {
+          users: { select: { id: true, email: true, role: true } },
           _count: {
             select: {
               routers: true,
@@ -121,6 +122,26 @@ router.delete('/:id', async (req, res) => {
     res.json({ message: 'Operator and all associated data deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: 'Failed to delete operator. They might have active data.' });
+  }
+});
+
+// Delete an individual Operator login without deleting the Operator or its business data.
+router.delete('/:id/users/:userId', async (req, res) => {
+  try {
+    const { id: tenantId, userId } = req.params;
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user || user.tenantId !== tenantId) {
+      res.status(404).json({ error: 'Operator login not found for this Operator' });
+      return;
+    }
+    if (user.role === 'PLATFORM_ADMIN') {
+      res.status(403).json({ error: 'Platform Admin accounts cannot be deleted from Operator management' });
+      return;
+    }
+    await prisma.user.delete({ where: { id: userId } });
+    res.json({ message: 'Operator login deleted. The Operator and its routers, packages and records were kept.' });
+  } catch {
+    res.status(500).json({ error: 'Failed to delete Operator login' });
   }
 });
 
