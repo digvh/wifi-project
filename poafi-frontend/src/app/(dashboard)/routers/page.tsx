@@ -271,6 +271,30 @@ export default function RoutersPage() {
               <p className="text-[11px] text-gray-500 mt-1">Choose the exact model of the physical device. Add it to Device Catalogue first if it is missing.</p>
             </div>
 
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Installation Site</label>
+                <input value={formData.siteName} onChange={(e) => setFormData({ ...formData, siteName: e.target.value })} placeholder="e.g. Arusha Main Branch" className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-white text-sm" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Installation Address / Area</label>
+                <input value={formData.installationAddress} onChange={(e) => setFormData({ ...formData, installationAddress: e.target.value })} placeholder="Street, ward, town" className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-white text-sm" />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Management Connection Path</label>
+              <select value={formData.connectionMode} onChange={(e) => setFormData({ ...formData, connectionMode: e.target.value })} className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white text-sm">
+                <option value="DIRECT">Direct network access</option>
+                <option value="VPN">Private VPN</option>
+                <option value="SECURE_TUNNEL">Secure outbound tunnel</option>
+                <option value="CLOUD_CONTROLLER">Manufacturer cloud controller</option>
+              </select>
+              <p className="text-[11px] text-amber-400 mt-1">This records the intended access path. VPN/tunnel connectivity must be deployed separately before remote access works.</p>
+            </div>
+            <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Installation Notes</label>
+              <textarea value={formData.installationNotes} onChange={(e) => setFormData({ ...formData, installationNotes: e.target.value })} placeholder="Installation or configuration notes" className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-white text-sm min-h-20" />
+            </div>
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1">Router Name</label>
               <input
