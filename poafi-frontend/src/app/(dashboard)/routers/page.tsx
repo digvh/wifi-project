@@ -23,6 +23,10 @@ export default function RoutersPage() {
   const [formData, setFormData] = useState({
     tenantId: "",
     deviceModelId: "",
+    siteName: "",
+    installationAddress: "",
+    connectionMode: "DIRECT",
+    installationNotes: "",
     name: "",
     vendor: "MIKROTIK",
     host: "",
@@ -103,6 +107,10 @@ export default function RoutersPage() {
       setFormData({
         tenantId: isSuperAdmin && tenants.length > 0 ? tenants[0].id : (user?.tenantId || ""),
         deviceModelId: "",
+        siteName: "",
+        installationAddress: "",
+        connectionMode: "DIRECT",
+        installationNotes: "",
         name: "",
         vendor: "MIKROTIK",
         host: "",
@@ -373,7 +381,7 @@ export default function RoutersPage() {
                         </span>
                       </div>
                       <p className="text-sm text-gray-400">
-                        {r.host}:{r.apiPort} • Operator: {r.tenant?.name || "Global"}{r.deviceModel ? ` • ${r.deviceModel.brand} ${r.deviceModel.model}` : " • Model not linked"}
+                        {r.host}:{r.apiPort} • Operator: {r.tenant?.name || "Global"}{r.deviceModel ? ` • ${r.deviceModel.brand} ${r.deviceModel.model}` : " • Model not linked"}{r.siteName ? ` • Site: ${r.siteName}` : ""}
                       </p>
                     </div>
                   </div>
