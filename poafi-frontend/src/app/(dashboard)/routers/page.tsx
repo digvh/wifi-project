@@ -37,6 +37,7 @@ export default function RoutersPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [testingId, setTestingId] = useState<string | null>(null);
+  const [editingRouterId, setEditingRouterId] = useState<string | null>(null);
   const [activeSessionsRouterId, setActiveSessionsRouterId] = useState<string | null>(null);
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
@@ -99,11 +100,13 @@ export default function RoutersPage() {
     }
 
     try {
-      await apiFetch("/routers", {
-        method: "POST",
+      if (editingRouterId && !formData.password) delete (payload as any).password;
+      await apiFetch(editingRouterId ? `/routers/${editingRouterId}` : "/routers", {
+        method: editingRouterId ? "PUT" : "POST",
         body: JSON.stringify(payload),
       });
-      setSuccess("Router registered successfully!");
+      setSuccess(editingRouterId ? "Router details updated successfully!" : "Router registered successfully!");
+      setEditingRouterId(null);
       setFormData({
         tenantId: isSuperAdmin && tenants.length > 0 ? tenants[0].id : (user?.tenantId || ""),
         deviceModelId: "",
@@ -351,15 +354,17 @@ export default function RoutersPage() {
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-white focus:border-[#00f3ff] outline-none text-sm"
-                required
+                required={!editingRouterId}
               />
             </div>
+
+            {editingRouterId && <button type="button" onClick={() => { setEditingRouterId(null); setFormData({ tenantId: isSuperAdmin ? (tenants[0]?.id || "") : (user?.tenantId || ""), deviceModelId: "", siteName: "", installationAddress: "", connectionMode: "DIRECT", installationNotes: "", name: "", vendor: "MIKROTIK", host: "", apiPort: 8728, username: "", password: "" }); }} className="w-full bg-white/10 text-white py-2 rounded-lg">Cancel editing</button>}
 
             <button
               type="submit"
               className="w-full bg-gradient-to-r from-[#00f3ff] to-[#9d00ff] text-white font-bold py-3 rounded-lg hover:opacity-90 transition-opacity text-sm shadow-lg"
             >
-              Save Gateway Router
+              {editingRouterId ? "Update Gateway Router" : "Save Gateway Router"}
             </button>
           </form>
         </div>
@@ -423,6 +428,14 @@ export default function RoutersPage() {
                       {r.status}
                     </span>
 
+                    <button
+                      onClick={() => {
+                        setEditingRouterId(r.id);
+                        setFormData({ tenantId: r.tenantId || "", deviceModelId: r.deviceModelId || r.deviceModel?.id || "", siteName: r.siteName || "", installationAddress: r.installationAddress || "", connectionMode: r.connectionMode || "DIRECT", installationNotes: r.installationNotes || "", name: r.name || "", vendor: r.vendor || "MIKROTIK", host: r.host || "", apiPort: r.apiPort || 8728, username: r.username || "", password: "" });
+                        setError(""); setSuccess("");
+                      }}
+                      className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-lg"
+                    >Edit</button>
                     <button
                       onClick={() => viewSessions(r.id)}
                       className="bg-white/5 hover:bg-white/10 text-gray-300 text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors border border-white/5"
