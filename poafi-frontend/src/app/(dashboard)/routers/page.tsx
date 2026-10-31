@@ -19,8 +19,10 @@ export default function RoutersPage() {
 
   const [routers, setRouters] = useState<any[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
+  const [deviceModels, setDeviceModels] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     tenantId: "",
+    deviceModelId: "",
     name: "",
     vendor: "MIKROTIK",
     host: "",
@@ -37,6 +39,8 @@ export default function RoutersPage() {
 
   const fetchData = async () => {
     try {
+      const catalogueData = await apiFetch("/device-catalog");
+      setDeviceModels(catalogueData.devices || []);
       if (isSuperAdmin) {
         const [routersData, tenantsData] = await Promise.all([
           apiFetch("/routers"),
@@ -98,6 +102,7 @@ export default function RoutersPage() {
       setSuccess("Router registered successfully!");
       setFormData({
         tenantId: isSuperAdmin && tenants.length > 0 ? tenants[0].id : (user?.tenantId || ""),
+        deviceModelId: "",
         name: "",
         vendor: "MIKROTIK",
         host: "",
@@ -244,6 +249,21 @@ export default function RoutersPage() {
             </div>
 
             <div>
+              <label className="block text-xs font-medium text-gray-400 mb-1">Catalogue Device Model (optional)</label>
+              <select
+                value={formData.deviceModelId}
+                onChange={(e) => setFormData({ ...formData, deviceModelId: e.target.value })}
+                className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white focus:border-[#00f3ff] outline-none text-sm"
+              >
+                <option value="">Select model or register without catalogue link</option>
+                {deviceModels.map((model) => (
+                  <option key={model.id} value={model.id}>{model.brand} {model.model} — {model.category}</option>
+                ))}
+              </select>
+              <p className="text-[11px] text-gray-500 mt-1">Choose the exact model of the physical device. Add it to Device Catalogue first if it is missing.</p>
+            </div>
+
+            <div>
               <label className="block text-xs font-medium text-gray-400 mb-1">Router Name</label>
               <input
                 type="text"
@@ -353,7 +373,7 @@ export default function RoutersPage() {
                         </span>
                       </div>
                       <p className="text-sm text-gray-400">
-                        {r.host}:{r.apiPort} • Operator: {r.tenant?.name || "Global"}
+                        {r.host}:{r.apiPort} • Operator: {r.tenant?.name || "Global"}{r.deviceModel ? ` • ${r.deviceModel.brand} ${r.deviceModel.model}` : " • Model not linked"}
                       </p>
                     </div>
                   </div>
