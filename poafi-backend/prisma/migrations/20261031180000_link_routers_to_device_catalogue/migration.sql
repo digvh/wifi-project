@@ -9,3 +9,10 @@ ALTER TABLE "Router"
   ADD CONSTRAINT "Router_deviceModelId_fkey"
   FOREIGN KEY ("deviceModelId") REFERENCES "NetworkDeviceModel"("id")
   ON DELETE SET NULL ON UPDATE CASCADE;
+
+ALTER TABLE "Router"
+  ADD COLUMN "siteName" TEXT,
+  ADD COLUMN "installationAddress" TEXT,
+  ADD COLUMN "connectionMode" TEXT NOT NULL DEFAULT 'DIRECT',
+  ADD COLUMN "setupStatus" TEXT NOT NULL DEFAULT 'PENDING',
+  ADD COLUMN "installationNotes" TEXT;
