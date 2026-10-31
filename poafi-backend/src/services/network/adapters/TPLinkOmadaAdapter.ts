@@ -22,41 +22,22 @@ export class TPLinkOmadaAdapter implements IRouterAdapter {
   }
 
   async testConnection(): Promise<RouterTestResult> {
-    try {
-      // In production: POST /api/v2/login with config.username & password
-      return {
-        connected: true,
-        vendor: 'TPLINK_OMADA',
-        identity: `Omada Controller (${this.config.host})`,
-        version: 'v5.x (SDN Ready)',
-        model: 'TP-Link Omada SDN Gateway / Controller',
-      };
-    } catch (error: any) {
-      throw new Error(`TP-Link Omada connection failed: ${error.message}`);
-    }
+    throw new Error('TP-Link Omada live API connection is not implemented. This device has NOT been verified as connected.');
   }
 
-  async provisionUser(options: ProvisionUserOptions): Promise<boolean> {
-    try {
-      // In production:
-      // POST /api/v2/sites/{site}/hotspot/vouchers
-      // Generates Omada voucher with duration, rate limit (up/down kbps) and code
-      return true;
-    } catch (error: any) {
-      throw new Error(`Failed to provision user on TP-Link Omada: ${error.message}`);
-    }
+  async provisionUser(_options: ProvisionUserOptions): Promise<boolean> {
+    throw new Error('TP-Link Omada hotspot voucher provisioning is not implemented yet.');
   }
 
-  async removeUser(username: string): Promise<boolean> {
-    return true;
+  async removeUser(_username: string): Promise<boolean> {
+    throw new Error('TP-Link Omada hotspot user removal is not implemented yet.');
   }
 
   async listActiveSessions(): Promise<ActiveSession[]> {
-    return [];
+    throw new Error('TP-Link Omada active-session retrieval is not implemented yet.');
   }
 
-  async disconnectSession(usernameOrId: string): Promise<boolean> {
-    return true;
-  }
-}
+  async disconnectSession(_usernameOrId: string): Promise<boolean> {
+    throw new Error('TP-Link Omada session disconnection is not implemented yet.');
+  }}
 
