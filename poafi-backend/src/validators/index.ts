@@ -26,6 +26,7 @@ export const createTenantLoginSchema = z.object({
 // Routers
 export const createRouterSchema = z.object({
   tenantId: z.string().uuid('Invalid tenant ID').optional(),
+  deviceModelId: z.string().uuid('Invalid device model ID').optional().nullable(),
   name: z.string().min(1, 'Router name is required').max(100),
   host: z.string().min(1, 'Host is required'),
   apiPort: z.coerce.number().int().min(1).max(65535).default(8728),
@@ -35,6 +36,7 @@ export const createRouterSchema = z.object({
 });
 
 export const updateRouterSchema = z.object({
+  deviceModelId: z.string().uuid('Invalid device model ID').optional().nullable(),
   name: z.string().min(1).max(100).optional(),
   host: z.string().min(1).optional(),
   apiPort: z.coerce.number().int().min(1).max(65535).optional(),
