@@ -16,38 +16,22 @@ export class RuijieAdapter implements IRouterAdapter {
   constructor(private readonly config: RouterConnectionConfig) {}
 
   async testConnection(): Promise<RouterTestResult> {
-    try {
-      return {
-        connected: true,
-        vendor: 'RUIJIE',
-        identity: `Ruijie Reyee Gateway (${this.config.host})`,
-        version: 'ReyeeOS / Ruijie Cloud Ready',
-        model: 'Ruijie Reyee RG Series',
-      };
-    } catch (error: any) {
-      throw new Error(`Ruijie connection failed: ${error.message}`);
-    }
+    throw new Error('Ruijie / Reyee live API connection is not implemented. This device has NOT been verified as connected.');
   }
 
-  async provisionUser(options: ProvisionUserOptions): Promise<boolean> {
-    try {
-      // Calls Ruijie captive portal auth / voucher creation API
-      return true;
-    } catch (error: any) {
-      throw new Error(`Failed to provision user on Ruijie: ${error.message}`);
-    }
+  async provisionUser(_options: ProvisionUserOptions): Promise<boolean> {
+    throw new Error('Ruijie / Reyee hotspot voucher provisioning is not implemented yet.');
   }
 
-  async removeUser(username: string): Promise<boolean> {
-    return true;
+  async removeUser(_username: string): Promise<boolean> {
+    throw new Error('Ruijie / Reyee hotspot user removal is not implemented yet.');
   }
 
   async listActiveSessions(): Promise<ActiveSession[]> {
-    return [];
+    throw new Error('Ruijie / Reyee active-session retrieval is not implemented yet.');
   }
 
-  async disconnectSession(usernameOrId: string): Promise<boolean> {
-    return true;
-  }
-}
+  async disconnectSession(_usernameOrId: string): Promise<boolean> {
+    throw new Error('Ruijie / Reyee session disconnection is not implemented yet.');
+  }}
 
