@@ -126,6 +126,7 @@ export class PaymentService {
     payment: any;
     voucher: any;
     rawCode: string;
+    accessMode: 'RADIUS' | 'NATIVE' | 'MANUAL';
   }> {
     const payment = await prisma.payment.findUnique({
       where: { reference },
@@ -144,9 +145,41 @@ export class PaymentService {
       throw new Error('Webhook amount does not match the expected payment amount');
     }
 
+    const radiusNas = env.RADIUS_ENABLED
+      ? await prisma.radiusNas.findFirst({
+          where: {
+            tenantId: payment.tenantId,
+            isActive: true,
+            OR: payment.package.routerId
+              ? [{ routerId: null }, { routerId: payment.package.routerId }]
+              : undefined,
+          },
+          select: { id: true },
+        })
+      : null;
+
+    const routerDevice = !radiusNas
+      ? await prisma.router.findFirst({
+          where: {
+            tenantId: payment.tenantId,
+            status: 'ONLINE',
+            ...(payment.package.routerId ? { id: payment.package.routerId } : {}),
+          },
+        })
+      : null;
+
+    const nativeAdapterAvailable = Boolean(
+      routerDevice && RouterAdapterFactory.hasAdapter(routerDevice.vendor),
+    );
+    const accessMode: 'RADIUS' | 'NATIVE' | 'MANUAL' = radiusNas
+      ? 'RADIUS'
+      : nativeAdapterAvailable
+        ? 'NATIVE'
+        : 'MANUAL';
+
     if (payment.status === 'SUCCESS' && payment.voucher) {
       const rawCode = decryptSecret(payment.voucher.encryptedCode);
-      return { payment, voucher: payment.voucher, rawCode };
+      return { payment, voucher: payment.voucher, rawCode, accessMode };
     }
 
     if (payment.status !== 'PENDING') {
@@ -173,11 +206,13 @@ export class PaymentService {
       if (claimed.count !== 1) {
         const current = await tx.payment.findUnique({ where: { id: payment.id }, include: { voucher: true } });
         if (current?.status === 'SUCCESS' && current.voucher) {
-          return { payment: current, voucher: current.voucher };
+          return { payment: current, voucher: current.voucher, alreadyProcessed: true };
         }
         throw new Error('Payment was already processed by another request');
       }
 
+      // For RADIUS and manual-network paths, keep the voucher UNUSED. The
+      // session timer begins only when the NAS accepts the first login.
       const voucher = await tx.voucher.create({
         data: {
           batchId,
@@ -185,9 +220,9 @@ export class PaymentService {
           packageId: payment.packageId,
           codeHash,
           encryptedCode,
-          status: 'ACTIVE',
-          activatedAt: now,
-          expiresAt,
+          status: 'UNUSED',
+          activatedAt: null,
+          expiresAt: null,
           usedByIp: payment.phoneNumber,
         },
       });
@@ -197,15 +232,25 @@ export class PaymentService {
         data: { voucherId: voucher.id },
       });
 
-      return { payment: updatedPayment, voucher };
+      return { payment: updatedPayment, voucher, alreadyProcessed: false };
     });
 
-    try {
-      const routerDevice = await prisma.router.findFirst({
-        where: { tenantId: payment.tenantId, status: 'ONLINE' },
-      });
+    // A duplicate webhook must return the original voucher. Do not provision a
+    // different generated code or send another SMS receipt.
+    if (result.alreadyProcessed) {
+      const originalCode = decryptSecret(result.voucher.encryptedCode);
+      return {
+        payment: result.payment,
+        voucher: result.voucher,
+        rawCode: originalCode,
+        accessMode,
+      };
+    }
 
-      if (routerDevice) {
+    // Native drivers provision now and activate the timer only after they
+    // report success. RADIUS devices authenticate the unused voucher later.
+    if (accessMode === 'NATIVE' && routerDevice) {
+      try {
         const routerPassword = decryptSecret(routerDevice.encryptedPassword);
         const adapter = RouterAdapterFactory.getAdapter(routerDevice.vendor, {
           host: routerDevice.host,
@@ -214,7 +259,7 @@ export class PaymentService {
           password: routerPassword,
         });
 
-        await adapter.provisionUser({
+        const provisioned = await adapter.provisionUser({
           username: rawCode,
           password: rawCode,
           durationMinutes: payment.package.durationMinutes,
@@ -222,9 +267,18 @@ export class PaymentService {
           uploadKbps: payment.package.uploadKbps,
           comment: `PoaFi Pay: ${payment.phoneNumber}`,
         });
+
+        if (provisioned) {
+          const activatedAt = new Date();
+          const nativeExpiresAt = new Date(activatedAt.getTime() + payment.package.durationMinutes * 60 * 1000);
+          await prisma.voucher.updateMany({
+            where: { id: result.voucher.id, status: 'UNUSED' },
+            data: { status: 'ACTIVE', activatedAt, expiresAt: nativeExpiresAt },
+          });
+        }
+      } catch (routerErr) {
+        console.error('Native router provisioning failed after payment; voucher remains unused:', routerErr);
       }
-    } catch (routerErr) {
-      console.error('Auto-provision on router failed after payment:', routerErr);
     }
 
     try {
@@ -239,7 +293,13 @@ export class PaymentService {
       console.error('Failed to dispatch SMS receipt:', smsErr);
     }
 
-    return { payment: result.payment, voucher: result.voucher, rawCode };
+    const latestVoucher = await prisma.voucher.findUnique({ where: { id: result.voucher.id } });
+    return {
+      payment: result.payment,
+      voucher: latestVoucher || result.voucher,
+      rawCode,
+      accessMode,
+    };
   }
 
   static async handleWebhook(payload: any, signature?: string): Promise<{ success: boolean; message: string }> {
@@ -270,7 +330,7 @@ export class PaymentService {
     const payment = await prisma.payment.findFirst({
       where: { id: paymentId, accessTokenHash: tokenHash },
       include: {
-        package: { select: { name: true, durationMinutes: true, downloadKbps: true, uploadKbps: true } },
+        package: { select: { name: true, durationMinutes: true, downloadKbps: true, uploadKbps: true, routerId: true } },
         voucher: true,
       },
     });
@@ -284,6 +344,32 @@ export class PaymentService {
       voucherCode = decryptSecret(payment.voucher.encryptedCode);
     }
 
+    const radiusAvailable = env.RADIUS_ENABLED
+      ? await prisma.radiusNas.count({
+          where: {
+            tenantId: payment.tenantId,
+            isActive: true,
+            OR: payment.package.routerId
+              ? [{ routerId: null }, { routerId: payment.package.routerId }]
+              : undefined,
+          },
+        })
+      : 0;
+    const nativeRouter = !radiusAvailable
+      ? await prisma.router.findFirst({
+          where: {
+            tenantId: payment.tenantId,
+            status: 'ONLINE',
+            ...(payment.package.routerId ? { id: payment.package.routerId } : {}),
+          },
+        })
+      : null;
+    const accessMode = radiusAvailable > 0
+      ? 'RADIUS'
+      : nativeRouter && RouterAdapterFactory.hasAdapter(nativeRouter.vendor)
+        ? 'NATIVE'
+        : 'MANUAL';
+
     return {
       paymentId: payment.id,
       reference: payment.reference,
@@ -294,6 +380,8 @@ export class PaymentService {
       packageName: payment.package.name,
       durationMinutes: payment.package.durationMinutes,
       voucherCode,
+      accessMode,
+      voucherStatus: payment.voucher?.status,
       activatedAt: payment.voucher?.activatedAt,
       expiresAt: payment.voucher?.expiresAt,
     };

@@ -45,8 +45,31 @@ router.post('/redeem', redeemLimiter, validate(redeemVoucherSchema), async (req,
       return;
     }
 
-    // Honor the router assigned to the package. Only unassigned packages use
-    // the tenant's first online gateway as a fallback.
+    // If this Operator uses shared RADIUS authentication, the voucher must
+    // be entered in the NAS's own captive-portal login form. This public page
+    // must not consume or activate it because it cannot perform the NAS login.
+    const radiusNas = await prisma.radiusNas.findFirst({
+      where: {
+        tenantId: voucher.tenantId,
+        isActive: true,
+        OR: voucher.package.routerId
+          ? [{ routerId: null }, { routerId: voucher.package.routerId }]
+          : undefined,
+      },
+      select: { id: true },
+    });
+
+    if (radiusNas) {
+      res.json({
+        requiresDeviceLogin: true,
+        message: 'Your voucher is valid. Return to the Wi-Fi sign-in page on this network and enter the voucher there to connect. Your time starts when the network accepts your login.',
+        packageName: voucher.package.name,
+        durationMinutes: voucher.package.durationMinutes,
+      });
+      return;
+    }
+
+    // Native router fallback: honor the router assigned to the package.
     const routerWhere = voucher.package.routerId
       ? { id: voucher.package.routerId, tenantId: voucher.tenantId, status: 'ONLINE' }
       : { tenantId: voucher.tenantId, status: 'ONLINE' };

@@ -1,0 +1,18 @@
+# Called when a RADIUS packet arrives from an unknown IPv4 source address.
+# FreeRADIUS passes the packet source address to PoaFi. The API returns a
+# tenant-scoped client definition only when that source IP is registered.
+server dynamic_clients {
+    authorize {
+        update control {
+            &REST-HTTP-Header := "X-PoaFi-Radius-Key: $ENV{RADIUS_REST_SHARED_SECRET}"
+        }
+
+        radius_clients
+
+        if (updated) {
+            ok
+        }
+
+        reject
+    }
+}

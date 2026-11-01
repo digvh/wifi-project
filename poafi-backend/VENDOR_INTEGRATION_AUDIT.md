@@ -35,6 +35,19 @@ At this audit:
 
 Do not describe any planned integration as connected or supported.
 
+
+## Common RADIUS hotspot route
+
+A generic RADIUS route is now implemented for compatible hotspot equipment. It is a shared authentication/accounting integration, not a native device-management API.
+
+The Operator setup page registers a NAS source IPv4 address and encrypts a per-NAS shared secret. FreeRADIUS dynamically resolves registered NAS clients through the private PoaFi API. Voucher Access-Requests are checked against the Operator's voucher records; Access-Accept contains Session-Timeout, WISPr maximum upload/download rates (bits/sec), and Filter-Id. Accounting updates are stored in PoaFi.
+
+This provides a way to accept vouchers across vendors whose specific equipment and firmware support external RADIUS PAP captive-portal authentication and accounting. It does not guarantee that every model from a selected vendor supports the relevant RADIUS options. The operator still configures RADIUS settings and hotspot portal on the equipment.
+
+Not included: EAP/802.1X, CHAP/MS-CHAP, CoA/Disconnect-Message, automatic SSID/VLAN/radio/portal redirect configuration, arbitrary vendor-specific traffic-shaping attributes, and vendor controller adoption. WISPr bandwidth attributes are honoured only on compatible NAS devices; other devices may require mapping Filter-Id to a local profile.
+
+The NAS registry currently requires a fixed IPv4 source address as seen by the RADIUS server. RADIUS UDP transport should be protected by private VPN/firewall restrictions where practical. It is not physically tested against vendor hardware yet.
+
 ## Why “any vendor” needs vendor-specific work
 
 There is no universal management API that every router, access point, switch and controller implements. Vendors expose different APIs, authentication methods, firmware capabilities, controller models and license requirements. Some equipment is managed directly; other equipment is adopted by a controller. Some consumer devices expose no supported third-party management API at all.

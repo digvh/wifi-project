@@ -5,6 +5,7 @@ on:
     paths:
       - "poafi-backend/**"
       - "poafi-frontend/**"
+      - "poafi-radius/**"
       - ".github/workflows/poafi-catalogue-checks.yml"
   workflow_dispatch:
 
@@ -52,3 +53,18 @@ jobs:
           cache-dependency-path: poafi-frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  radius:
+    name: FreeRADIUS container configuration validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build FreeRADIUS image
+        run: docker build -t poafi-radius-check ./poafi-radius
+      - name: Validate FreeRADIUS configuration
+        run: |
+          docker run --rm \
+            -e POAFI_API_URL=http://127.0.0.1:4000 \
+            -e RADIUS_REST_SHARED_SECRET=ci-only-secret-value-which-is-at-least-32-chars \
+            --entrypoint freeradius \
+            poafi-radius-check -XC

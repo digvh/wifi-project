@@ -12,6 +12,7 @@ import paymentRoutes from './routes/payments';
 import statsRoutes from './routes/stats';
 import applicationRoutes from './routes/applications';
 import deviceCatalogRoutes from './routes/deviceCatalog';
+import radiusRoutes from './routes/radius';
 import { VoucherCleanupService } from './services/cron/VoucherCleanupService';
 
 const app = express();
@@ -26,6 +27,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/tenants', tenantRoutes);
 app.use('/api/routers', routerRoutes);
+app.use('/api/radius', radiusRoutes);
 app.use('/api/device-catalog', deviceCatalogRoutes);
 app.use('/api/packages', packageRoutes);
 app.use('/api/vouchers', voucherRoutes);

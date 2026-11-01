@@ -11,7 +11,8 @@ import {
   Package, 
   ClipboardCheck,
   Globe,
-  Network
+  Network,
+  Settings2
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
@@ -24,6 +25,7 @@ export default function Sidebar() {
     { name: "Global Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { name: "Operator Applications", href: "/applications", icon: ClipboardCheck },
     { name: "Operators (Tenants)", href: "/tenants", icon: Users },
+    { name: "Internet Access Setup", href: "/network-setup", icon: Settings2 },
     { name: "Routers & Gateways", href: "/routers", icon: Router },
     { name: "Device Catalogue", href: "/device-catalog", icon: Network },
     { name: "System Billing", href: "/billing", icon: CreditCard },
@@ -31,6 +33,7 @@ export default function Sidebar() {
 
   const operatorLinks = [
     { name: "My Dashboard", href: "/dashboard", icon: LayoutDashboard },
+    { name: "Internet Access Setup", href: "/network-setup", icon: Settings2 },
     { name: "My Routers", href: "/routers", icon: Router },
     { name: "Device Catalogue", href: "/device-catalog", icon: Network },
     { name: "My Packages", href: "/packages", icon: Package },

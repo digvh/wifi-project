@@ -5,19 +5,25 @@ import { Package, ShieldAlert, Trash2 } from "lucide-react";
 
 export default function PackagesPage() {
   const [packages, setPackages] = useState<any[]>([]);
+  const [routers, setRouters] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: "1 Hour Pass",
     priceTzs: "500",
     durationMinutes: "60",
     downloadKbps: "3000",
     uploadKbps: "1000",
+    routerId: "",
   });
   const [error, setError] = useState("");
 
   const fetchPackages = async () => {
     try {
-      const data = await apiFetch("/packages");
+      const [data, routerData] = await Promise.all([
+        apiFetch("/packages"),
+        apiFetch("/routers"),
+      ]);
       setPackages(data.packages || []);
+      setRouters(routerData.routers || []);
     } catch (err: any) {
       setError(err.message);
     }
@@ -31,7 +37,10 @@ export default function PackagesPage() {
     e.preventDefault();
     setError("");
     try {
-      await apiFetch("/packages", { method: "POST", body: JSON.stringify(formData) });
+      await apiFetch("/packages", {
+        method: "POST",
+        body: JSON.stringify({ ...formData, routerId: formData.routerId || null }),
+      });
       fetchPackages();
     } catch (err: any) {
       setError(err.message);
@@ -108,6 +117,18 @@ export default function PackagesPage() {
               />
             </div>
 
+            <select
+              value={formData.routerId}
+              onChange={(e) => setFormData({ ...formData, routerId: e.target.value })}
+              className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white outline-none focus:border-[#00f3ff]"
+            >
+              <option value="">Use operator default gateway</option>
+              {routers.map((router) => (
+                <option key={router.id} value={router.id}>{router.name} ({router.vendor})</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-gray-500">Choose which gateway serves this package. For RADIUS, link the registered NAS to the same router when appropriate.</p>
+
             <button
               type="submit"
               className="w-full bg-[#00f3ff] text-black font-bold py-3 rounded-lg hover:bg-[#00f3ff]/80 transition-colors"
@@ -137,6 +158,7 @@ export default function PackagesPage() {
                     <p className="text-sm text-gray-400">
                       {p.durationMinutes} Minutes • {Math.round(p.downloadKbps / 1000)} Mbps Down
                     </p>
+                    <p className="text-xs text-gray-500">{p.router?.name || "Operator default gateway"}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-4">

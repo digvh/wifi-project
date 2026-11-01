@@ -39,6 +39,13 @@ const I18N = {
     waitingPin: "Inasubiri uthibitishe kwa PIN kwenye simu yako...",
     connectedTitle: "🎉 Umeunganishwa!",
     connectedSub: "Umefanikiwa kuanzisha kifurushi chako cha intaneti.",
+    radiusTitle: "Malipo yamefanikiwa — ingia kwenye Wi-Fi",
+    radiusSub: "Rudi kwenye ukurasa wa kuingia wa Wi-Fi wa kifaa hiki na uweke vocha yako. Muda wako utaanza mtandao utakapokubali vocha.",
+    radiusAction: "Tumia ukurasa wa kuingia wa Wi-Fi wa kifaa chako.",
+    manualTitle: "Malipo yamefanikiwa — vocha imetolewa",
+    manualSub: "Malipo yamepokelewa na nambari ya vocha imetolewa, lakini kifaa cha Wi-Fi bado hakijathibitishwa kuwa kimeunganishwa na PoaFi. Wasiliana na mhudumu wa mtandao ili akamilishe usanidi.",
+    manualAction: "Hifadhi vocha yako na wasiliana na mhudumu wa mtandao kabla ya kuanza kutumia intaneti.",
+
     voucherCodeLabel: "Kodi Yako ya Vocha",
     startBrowsing: "Anza Kutumia Intaneti",
     cancel: "← Ghairi na chagua kifurushi kingine",
@@ -63,6 +70,13 @@ const I18N = {
     waitingPin: "Waiting for your PIN confirmation...",
     connectedTitle: "🎉 Connected!",
     connectedSub: "Your Wi-Fi access has been activated on the network gateway.",
+    radiusTitle: "Payment successful — sign in to Wi-Fi",
+    radiusSub: "Return to this network's Wi-Fi sign-in page and enter your voucher. Your time starts when the network accepts your voucher.",
+    radiusAction: "Use the Wi-Fi sign-in page provided by your router or access point.",
+    manualTitle: "Payment successful — voucher issued",
+    manualSub: "Your payment was received and a voucher was issued, but the Wi-Fi equipment has not yet been confirmed as connected to PoaFi. Contact the network operator to complete setup.",
+    manualAction: "Keep your voucher code and contact the network operator before trying to browse.",
+
     voucherCodeLabel: "Your Voucher Code",
     startBrowsing: "Start Browsing",
     cancel: "← Cancel and choose different package",
@@ -148,7 +162,9 @@ function PortalContent() {
 
     const interval = setInterval(async () => {
       try {
-        const res = await apiFetch(`/payments/${checkoutData.paymentId}/status`);
+        const res = await apiFetch(`/payments/${checkoutData.paymentId}/status`, {
+          headers: { "X-Payment-Access-Token": checkoutData.accessToken },
+        });
         if (res.status === "SUCCESS") {
           setPaymentStatus(res);
           setPolling(false);
@@ -180,6 +196,8 @@ function PortalContent() {
         ...checkoutData,
         status: "SUCCESS",
         voucherCode: res.voucherCode,
+        accessMode: res.accessMode,
+        voucherStatus: res.voucherStatus,
       });
       setPolling(false);
     } catch (err: any) {
@@ -250,32 +268,48 @@ function PortalContent() {
 
         {/* Success Screen */}
         {(paymentStatus || redeemSuccess) && (
-          <div className="glass-panel p-8 text-center space-y-4 border-green-500/30 bg-green-500/10">
-            <div className="w-16 h-16 bg-green-500/20 text-green-400 rounded-full flex items-center justify-center mx-auto">
-              <CheckCircle2 size={36} />
-            </div>
-            <h2 className="text-2xl font-bold text-white">{t.connectedTitle}</h2>
-            <p className="text-sm text-gray-300">{t.connectedSub}</p>
+          (() => {
+            const needsRadiusLogin = paymentStatus?.accessMode === "RADIUS" || redeemSuccess?.requiresDeviceLogin;
+            const needsOperatorSetup = paymentStatus?.accessMode === "MANUAL" || (paymentStatus?.voucherStatus === "UNUSED" && !needsRadiusLogin);
+            return (
+              <div className="glass-panel p-8 text-center space-y-4 border-green-500/30 bg-green-500/10">
+                <div className="w-16 h-16 bg-green-500/20 text-green-400 rounded-full flex items-center justify-center mx-auto">
+                  <CheckCircle2 size={36} />
+                </div>
+                <h2 className="text-2xl font-bold text-white">{needsRadiusLogin ? t.radiusTitle : needsOperatorSetup ? t.manualTitle : t.connectedTitle}</h2>
+                <p className="text-sm text-gray-300">{needsRadiusLogin ? t.radiusSub : needsOperatorSetup ? t.manualSub : t.connectedSub}</p>
 
-            {(paymentStatus?.voucherCode || redeemSuccess?.packageName) && (
-              <div className="bg-black/40 p-4 rounded-xl border border-white/10 space-y-1">
-                <span className="text-xs text-gray-400 uppercase tracking-wider">{t.voucherCodeLabel}</span>
-                <p className="text-2xl font-mono font-bold text-[#00f3ff] tracking-widest">
-                  {paymentStatus?.voucherCode || voucherCode}
-                </p>
-                <p className="text-xs text-gray-400">
-                  {paymentStatus?.durationMinutes || redeemSuccess?.durationMinutes} minutes
-                </p>
+                {(paymentStatus?.voucherCode || redeemSuccess?.packageName) && (
+                  <div className="bg-black/40 p-4 rounded-xl border border-white/10 space-y-1">
+                    <span className="text-xs text-gray-400 uppercase tracking-wider">{t.voucherCodeLabel}</span>
+                    <p className="text-2xl font-mono font-bold text-[#00f3ff] tracking-widest">
+                      {paymentStatus?.voucherCode || voucherCode}
+                    </p>
+                    <p className="text-xs text-gray-400">
+                      {paymentStatus?.durationMinutes || redeemSuccess?.durationMinutes} minutes
+                    </p>
+                  </div>
+                )}
+
+                {needsRadiusLogin ? (
+                  <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-sm text-amber-100">
+                    {t.radiusAction}
+                  </div>
+                ) : needsOperatorSetup ? (
+                  <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-sm text-amber-100">
+                    {t.manualAction}
+                  </div>
+                ) : (
+                  <a
+                    href="https://www.google.com"
+                    className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg hover:opacity-95 transition-opacity"
+                  >
+                    {t.startBrowsing} <ArrowRight size={18} />
+                  </a>
+                )}
               </div>
-            )}
-
-            <a
-              href="https://www.google.com"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg hover:opacity-95 transition-opacity"
-            >
-              {t.startBrowsing} <ArrowRight size={18} />
-            </a>
-          </div>
+            );
+          })()
         )}
 
         {/* Normal Portal Form */}
