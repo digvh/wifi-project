@@ -338,7 +338,7 @@ export class PaymentService {
             tenantId: payment.tenantId,
             isActive: true,
             OR: payment.package.routerId
-              ? [{ routerId: null }, { routerId: (payment as any).package.routerId }]
+              ? [{ routerId: null }, { routerId: payment.package.routerId }]
               : undefined,
           },
         })
@@ -348,7 +348,7 @@ export class PaymentService {
           where: {
             tenantId: payment.tenantId,
             status: 'ONLINE',
-            ...((payment as any).package?.routerId ? { id: (payment as any).package.routerId } : {}),
+            ...(payment.package.routerId ? { id: (payment as any).package.routerId } : {}),
           },
         })
       : null;
