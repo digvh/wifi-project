@@ -169,6 +169,7 @@ model RadiusNas {
   type            String   @default("other") @db.VarChar(30)
   encryptedSecret String   @db.Text
   description     String?  @db.VarChar(200)
+  isActive        Boolean  @default(true)
   createdAt       DateTime @default(now())
 
   tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
