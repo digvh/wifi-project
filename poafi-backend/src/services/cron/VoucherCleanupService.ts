@@ -13,7 +13,10 @@ export class VoucherCleanupService {
       const now = new Date();
       const expiredVouchers = await prisma.voucher.findMany({
         where: { status: 'ACTIVE', expiresAt: { lte: now } },
-        include: { package: { select: { routerId: true } } },
+        include: {
+          package: { select: { routerId: true } },
+          radiusSessions: { select: { id: true } },
+        },
         take: 100,
       });
 
@@ -25,6 +28,10 @@ export class VoucherCleanupService {
       // so cleanup never disconnects a voucher on an unrelated gateway.
       const groups = new Map<string, { tenantId: string; routerId: string | null; vouchers: typeof expiredVouchers }>();
       for (const voucher of expiredVouchers) {
+        // RADIUS NAS devices enforce Session-Timeout locally. This service does
+        // not send CoA/Disconnect-Message yet, so do not call an unrelated native
+        // router adapter for a voucher whose session was created through RADIUS.
+        if (voucher.radiusSessions.length > 0) continue;
         const routerId = voucher.package.routerId;
         const key = voucher.tenantId + ':' + (routerId || 'AUTO');
         const group = groups.get(key) || { tenantId: voucher.tenantId, routerId, vouchers: [] as typeof expiredVouchers };
