@@ -425,7 +425,11 @@ export default function RoutersPage() {
           <div className="space-y-4">
             {routers.length === 0 && <p className="text-gray-400 text-sm">No routers added yet.</p>}
             {routers.map((r) => {
-              const vendorMeta = VENDORS.find((v) => v.value === r.vendor) || VENDORS[0];
+              const vendorMeta = vendorOptions.find((v) => v.value === r.vendor) || {
+                label: r.vendor,
+                color: "text-gray-300 border-white/10 bg-white/5",
+              };
+              const driverAvailable = integrationInfo.some((item) => item.vendor === r.vendor && item.driverAvailable);
               return (
                 <div
                   key={r.id}
@@ -479,17 +483,20 @@ export default function RoutersPage() {
                     >Edit</button>
                     <button
                       onClick={() => viewSessions(r.id)}
-                      className="bg-white/5 hover:bg-white/10 text-gray-300 text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors border border-white/5"
+                      disabled={!driverAvailable}
+                      title={driverAvailable ? "View live sessions" : "This vendor's live API adapter is not implemented"}
+                      className="bg-white/5 hover:bg-white/10 text-gray-300 text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors border border-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Users size={14} /> Sessions
                     </button>
 
                     <button
                       onClick={() => handleTest(r.id)}
-                      disabled={testingId === r.id}
-                      className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+                      disabled={testingId === r.id || !driverAvailable}
+                      title={driverAvailable ? "Test the registered vendor adapter" : "This vendor's live API adapter is not implemented"}
+                      className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {testingId === r.id ? "Testing..." : "Test Connection"}
+                      {testingId === r.id ? "Testing..." : driverAvailable ? "Test Connection" : "Integration Pending"}
                     </button>
 
                     <button
