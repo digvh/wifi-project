@@ -1,0 +1,17 @@
+services:
+  poafi-radius:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: poafi-radius
+    restart: unless-stopped
+    environment:
+      POAFI_API_URL: ${POAFI_API_URL:?Set POAFI_API_URL to the private PoaFi backend URL}
+      RADIUS_REST_SHARED_SECRET: ${RADIUS_REST_SHARED_SECRET:?Set the same secret in the PoaFi backend environment}
+    ports:
+      - "1812:1812/udp"
+      - "1813:1813/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    security_opt:
+      - no-new-privileges:true
