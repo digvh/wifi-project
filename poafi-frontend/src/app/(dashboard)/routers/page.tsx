@@ -114,11 +114,11 @@ export default function RoutersPage() {
   }, [user]);
 
   const handleVendorChange = (vendor: string) => {
-    const target = VENDORS.find((v) => v.value === vendor);
+    const target = vendorOptions.find((v) => v.value === vendor);
     setFormData((prev) => ({
       ...prev,
       vendor,
-      apiPort: target ? target.defaultPort : 8728,
+      apiPort: target ? target.defaultPort : 443,
     }));
   };
 
