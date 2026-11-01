@@ -71,10 +71,10 @@ export default function RoutersPage() {
       setDeviceModels(models);
       setIntegrationInfo(capabilities);
 
-      const eligibleBrands = Array.from(new Set(
+      const eligibleBrands: string[] = Array.from(new Set<string>(
         models
           .filter((model: any) => ROUTER_ENDPOINT_CATEGORIES.includes(String(model.category).toUpperCase()))
-          .map((model: any) => String(model.brand))
+          .map((model: any): string => String(model.brand))
       ));
       const additionalVendors = eligibleBrands
         .map((brand) => ({
