@@ -1,0 +1,49 @@
+server default {
+    listen {
+        type = auth
+        ipaddr = *
+        port = 1812
+        proto = udp
+    }
+
+    listen {
+        type = acct
+        ipaddr = *
+        port = 1813
+        proto = udp
+    }
+
+    authorize {
+        filter_username
+        preprocess
+
+        update control {
+            &REST-HTTP-Header := "X-PoaFi-Radius-Key: $ENV{RADIUS_REST_SHARED_SECRET}"
+        }
+        poafi
+
+        # poafi returns control:Cleartext-Password only after it has validated
+        # the tenant, voucher, NAS, and package. PAP then verifies the supplied
+        # User-Password before Access-Accept is returned.
+        pap
+    }
+
+    authenticate {
+        Auth-Type PAP {
+            pap
+        }
+    }
+
+    accounting {
+        update control {
+            &REST-HTTP-Header := "X-PoaFi-Radius-Key: $ENV{RADIUS_REST_SHARED_SECRET}"
+        }
+        poafi
+    }
+
+    post-auth {
+        Post-Auth-Type REJECT {
+            attr_filter.access_reject
+        }
+    }
+}
