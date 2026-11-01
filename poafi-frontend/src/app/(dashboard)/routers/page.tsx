@@ -13,6 +13,22 @@ const VENDORS = [
   { value: "WAVLINK", label: "Wavlink", defaultPort: 80, color: "text-purple-400 border-purple-500/30 bg-purple-500/10" },
 ];
 
+const ROUTER_ENDPOINT_CATEGORIES = ["ROUTER", "GATEWAY", "CONTROLLER"];
+
+function vendorKeyForBrand(brand: string) {
+  const compact = brand.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const known: Record<string, string> = {
+    mikrotik: "MIKROTIK",
+    tplink: "TPLINK_OMADA",
+    ruijie: "RUIJIE",
+    reyee: "RUIJIE",
+    cudy: "CUDY",
+    comfast: "COMFAST",
+    wavlink: "WAVLINK",
+  };
+  return known[compact] || brand.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+}
+
 export default function RoutersPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "PLATFORM_ADMIN";
@@ -20,6 +36,8 @@ export default function RoutersPage() {
   const [routers, setRouters] = useState<any[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
   const [deviceModels, setDeviceModels] = useState<any[]>([]);
+  const [vendorOptions, setVendorOptions] = useState<any[]>(VENDORS);
+  const [integrationInfo, setIntegrationInfo] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     tenantId: "",
     deviceModelId: "",
@@ -44,8 +62,29 @@ export default function RoutersPage() {
 
   const fetchData = async () => {
     try {
-      const catalogueData = await apiFetch("/device-catalog");
-      setDeviceModels(catalogueData.devices || []);
+      const [catalogueData, capabilityData] = await Promise.all([
+        apiFetch("/device-catalog"),
+        apiFetch("/routers/integration-capabilities"),
+      ]);
+      const models = catalogueData.devices || [];
+      const capabilities = capabilityData.integrations || [];
+      setDeviceModels(models);
+      setIntegrationInfo(capabilities);
+
+      const eligibleBrands = Array.from(new Set(
+        models
+          .filter((model: any) => ROUTER_ENDPOINT_CATEGORIES.includes(String(model.category).toUpperCase()))
+          .map((model: any) => String(model.brand))
+      ));
+      const additionalVendors = eligibleBrands
+        .map((brand) => ({
+          value: vendorKeyForBrand(brand),
+          label: brand,
+          defaultPort: 443,
+          color: "text-gray-300 border-white/10 bg-white/5",
+        }))
+        .filter((option) => !VENDORS.some((known) => known.value === option.value));
+      setVendorOptions([...VENDORS, ...additionalVendors]);
       if (isSuperAdmin) {
         const [routersData, tenantsData] = await Promise.all([
           apiFetch("/routers"),
@@ -251,11 +290,11 @@ export default function RoutersPage() {
                 className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white focus:border-[#00f3ff] outline-none font-medium text-sm"
                 required
               >
-                {VENDORS.map((v) => (
-                  <option key={v.value} value={v.value}>
-                    {v.label}
-                  </option>
-                ))}
+                {vendorOptions.map((v) => {
+                  const integration = integrationInfo.find((item) => item.vendor === v.value);
+                  const stateLabel = integration?.driverAvailable ? " — LIVE DRIVER" : " — INVENTORY ONLY / DRIVER PENDING";
+                  return <option key={v.value} value={v.value}>{v.label}{stateLabel}</option>;
+                })}
               </select>
             </div>
 
@@ -267,9 +306,11 @@ export default function RoutersPage() {
                 className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white focus:border-[#00f3ff] outline-none text-sm"
               >
                 <option value="">Select model or register without catalogue link</option>
-                {deviceModels.map((model) => (
-                  <option key={model.id} value={model.id}>{model.brand} {model.model} — {model.category}</option>
-                ))}
+                {deviceModels
+                  .filter((model) => ROUTER_ENDPOINT_CATEGORIES.includes(String(model.category).toUpperCase()))
+                  .map((model) => (
+                    <option key={model.id} value={model.id}>{model.brand} {model.model} — {model.category}</option>
+                  ))}
               </select>
               <p className="text-[11px] text-gray-500 mt-1">Choose the exact model of the physical device. Add it to Device Catalogue first if it is missing.</p>
             </div>
