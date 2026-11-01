@@ -10,6 +10,7 @@ COPY conf/sites-available/dynamic-clients /etc/freeradius/3.0/sites-available/dy
 COPY conf/clients.conf /etc/freeradius/3.0/clients.conf
 
 RUN rm -f /etc/freeradius/3.0/mods-enabled/rest \
+       /etc/freeradius/3.0/mods-enabled/eap \
     && ln -s ../mods-available/rest /etc/freeradius/3.0/mods-enabled/rest \
     && rm -f /etc/freeradius/3.0/sites-enabled/default \
        /etc/freeradius/3.0/sites-enabled/inner-tunnel \
