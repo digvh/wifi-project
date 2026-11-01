@@ -10,12 +10,12 @@ It does **not** make every router or access point compatible. A device must supp
 - Per-NAS random shared secrets, encrypted in the PoaFi database and returned once when created or rotated.
 - Tenant-scoped voucher authentication through RADIUS Access-Request.
 - Standard `Session-Timeout` on Access-Accept so the NAS can end the session at voucher expiry.
-- `Filter-Id` to let supported NAS products map a PoaFi package to a locally configured bandwidth/access profile.
+- WISPr maximum upload/download bandwidth attributes (bits per second) and `Filter-Id` in Access-Accept. NAS products that support WISPr can apply the package rates directly; other products may map `Filter-Id` to a local bandwidth/access profile.
 - RADIUS Accounting Start, Interim-Update and Stop records in PoaFi.
 
 ## Protocol scope
 
-This first version supports PAP for captive-portal voucher login. It does not implement EAP/802.1X, CHAP, MS-CHAP, CoA/Disconnect-Message, vendor-specific speed-control attributes, or automatic SSID/VLAN configuration. Configure the NAS hotspot profile to use PAP and map the returned Filter-Id to a bandwidth profile if the device supports it.
+This first version supports PAP for captive-portal voucher login. Access-Accept includes Session-Timeout and WISPr maximum upload/download rates (bits per second), when supported by the NAS. It does not implement EAP/802.1X, CHAP, MS-CHAP, CoA/Disconnect-Message, arbitrary vendor-specific speed-control attributes, or automatic SSID/VLAN configuration. Configure the NAS hotspot profile to use PAP and map the returned Filter-Id to a bandwidth profile if the device supports it.
 
 RADIUS uses UDP 1812 (authentication) and 1813 (accounting). RADIUS over ordinary UDP is not transport encryption. Use private VPN transport where practical, use one random secret per NAS, restrict firewall source addresses where possible, and do not publish the backend REST bridge to the internet.
 
@@ -72,7 +72,7 @@ The captive portal page built into the vendor's device is used for this RADIUS f
 - **No response / unknown RADIUS client:** Verify the source IPv4 address the RADIUS container sees, that it is registered in PoaFi, and that UDP 1812/1813 can reach the server.
 - **Invalid shared secret:** Rotate the secret in PoaFi and update the NAS with the new secret.
 - **Voucher rejected:** Confirm the voucher belongs to this Operator, is unused or still active, and the NAS belongs to the same Operator.
-- **Login succeeds but speed is not limited:** Configure the NAS to map the returned `Filter-Id` to a local bandwidth/access profile. Generic RADIUS cannot apply every vendor's traffic-shaping syntax automatically.
+- **Login succeeds but speed is not limited:** Check whether the NAS supports WISPr-Bandwidth-Max-Up/Down. If not, configure the NAS to map the returned `Filter-Id` to a local bandwidth/access profile. Not every device enforces WISPr or Filter-Id in the same way.
 - **Accounting is missing:** Enable RADIUS accounting on the NAS and send Start, Interim-Update and Stop to UDP 1813.
 
 ## Important limitations
