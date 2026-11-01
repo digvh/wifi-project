@@ -101,7 +101,9 @@ router.post('/authorize', radiusRestAuthorized, async (req, res) => {
     const username = radiusValue(req.body, 'User-Name')?.trim().toUpperCase();
     const password = radiusValue(req.body, 'User-Password');
     const sourceIp = radiusValue(req.body, 'Packet-Src-IP-Address');
-    const nasIp = radiusValue(req.body, 'NAS-IP-Address') || sourceIp;
+    // FreeRADIUS has already validated the packet source against the dynamic
+    // client registry. Do not trust a caller-supplied NAS-IP-Address attribute.
+    const nasIp = sourceIp;
 
     if (!username || !password || !nasIp || isIP(nasIp) !== 4) {
       res.status(401).json({ error: 'Voucher credentials or NAS identity are missing' });
@@ -168,6 +170,18 @@ router.post('/authorize', radiusRestAuthorized, async (req, res) => {
       return;
     }
 
+    const activeSession = await prisma.radiusSession.findFirst({
+      where: {
+        voucherId: voucher.id,
+        status: { in: ['START', 'INTERIM_UPDATE'] },
+      },
+      select: { id: true, callingStationId: true },
+    });
+    if (activeSession) {
+      res.status(401).json({ error: 'This voucher already has an active Wi-Fi session' });
+      return;
+    }
+
     const remainingSeconds = Math.max(1, Math.ceil((activeVoucher.expiresAt.getTime() - now.getTime()) / 1000));
     const filterId = 'POAFI_' + voucher.package.id.replace(/-/g, '').slice(0, 16).toUpperCase();
 
@@ -192,7 +206,9 @@ router.post('/authorize', radiusRestAuthorized, async (req, res) => {
 router.post('/accounting', radiusRestAuthorized, async (req, res) => {
   try {
     const sourceIp = radiusValue(req.body, 'Packet-Src-IP-Address');
-    const nasIp = radiusValue(req.body, 'NAS-IP-Address') || sourceIp;
+    // Trust the source address verified by FreeRADIUS dynamic-client lookup.
+    // NAS-IP-Address is supplied by the device itself and is not an identity proof.
+    const nasIp = sourceIp;
     const acctSessionId = radiusValue(req.body, 'Acct-Session-Id');
     const username = radiusValue(req.body, 'User-Name')?.trim().toUpperCase();
     const statusType = (radiusValue(req.body, 'Acct-Status-Type') || '').toLowerCase();
