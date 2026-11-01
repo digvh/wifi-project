@@ -1,0 +1,32 @@
+# FreeRADIUS 3.2 REST bridge.
+# The backend API is reachable only on the private Docker/application network.
+# Custom HTTP auth is added per request through control:REST-HTTP-Header.
+
+rest radius_clients {
+    connect_uri = "$ENV{POAFI_API_URL}"
+    authorize {
+        uri = "${..connect_uri}/api/radius/resolve-client"
+        method = 'post'
+        body = 'json'
+        timeout = 3.0
+        do_xlat = no
+    }
+}
+
+rest poafi {
+    connect_uri = "$ENV{POAFI_API_URL}"
+    authorize {
+        uri = "${..connect_uri}/api/radius/authorize"
+        method = 'post'
+        body = 'json'
+        timeout = 3.0
+        do_xlat = no
+    }
+    accounting {
+        uri = "${..connect_uri}/api/radius/accounting"
+        method = 'post'
+        body = 'json'
+        timeout = 3.0
+        do_xlat = no
+    }
+}
