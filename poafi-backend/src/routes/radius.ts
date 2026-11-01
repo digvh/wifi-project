@@ -48,6 +48,8 @@ function getTenantId(req: Request, requestedTenantId?: string): string | null {
 const createClientSchema = z.object({
   tenantId: z.string().uuid().optional(),
   routerId: z.string().uuid().optional().nullable(),
+  vendor: z.string().trim().min(2).max(80).default('GENERIC'),
+  model: z.string().trim().max(120).optional().nullable(),
   name: z.string().trim().min(2).max(100),
   nasname: z.string().trim().min(1).max(128).refine((value) => isIP(value) === 4, 'Enter the fixed IPv4 address that the RADIUS server will see for this network device'),
   description: z.string().trim().max(200).optional().nullable(),
@@ -55,6 +57,8 @@ const createClientSchema = z.object({
 
 const updateClientSchema = z.object({
   routerId: z.string().uuid().nullable().optional(),
+  vendor: z.string().trim().min(2).max(80).optional(),
+  model: z.string().trim().max(120).nullable().optional(),
   name: z.string().trim().min(2).max(100).optional(),
   nasname: z.string().trim().min(1).max(128).refine((value) => isIP(value) === 4, 'Enter a valid IPv4 address').optional(),
   description: z.string().trim().max(200).nullable().optional(),
@@ -351,6 +355,8 @@ router.post('/clients', async (req, res) => {
         id,
         tenantId,
         routerId: parsed.data.routerId || null,
+        vendor: parsed.data.vendor,
+        model: parsed.data.model || null,
         name: parsed.data.name,
         nasname: parsed.data.nasname,
         shortname: shortname + '-' + id.slice(0, 8),
