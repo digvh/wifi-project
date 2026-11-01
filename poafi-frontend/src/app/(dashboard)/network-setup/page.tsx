@@ -306,7 +306,7 @@ export default function NetworkSetupPage() {
             <button onClick={() => copyText(oneTimeSecret)} className="mt-3 px-3 py-2 bg-white/10 rounded-lg text-sm flex items-center gap-2"><Copy size={14}/> Copy shared secret</button>
           </div>
           <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 p-3 text-sm text-amber-100">
-            This only registers the device with PoaFi. On the router/controller, you must enable its hotspot captive portal, configure RADIUS PAP and accounting, and map the PoaFi Filter-Id to a local bandwidth profile. Compatibility depends on the exact model and firmware.
+            This registers the device with PoaFi. On the router/controller, enable its hotspot captive portal, configure RADIUS PAP and accounting, and use WISPr bandwidth attributes if the device supports them. Otherwise map the PoaFi Filter-Id to a local bandwidth profile. Compatibility depends on the exact model and firmware.
           </div>
           <button onClick={() => { setOneTimeSecret(""); setOneTimeConfig(null); }} className="text-sm text-gray-400 underline">I have saved the secret</button>
         </div>
