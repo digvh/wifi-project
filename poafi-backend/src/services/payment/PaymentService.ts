@@ -318,7 +318,7 @@ export class PaymentService {
     const payment = await prisma.payment.findFirst({
       where: { id: paymentId, accessTokenHash: tokenHash },
       include: {
-        package: { select: { name: true, durationMinutes: true, downloadKbps: true, uploadKbps: true } },
+        package: { select: { name: true, durationMinutes: true, downloadKbps: true, uploadKbps: true, routerId: true } },
         voucher: true,
       },
     });
@@ -337,7 +337,7 @@ export class PaymentService {
           where: {
             tenantId: payment.tenantId,
             isActive: true,
-            OR: (payment as any).package?.routerId
+            OR: payment.package.routerId
               ? [{ routerId: null }, { routerId: (payment as any).package.routerId }]
               : undefined,
           },
