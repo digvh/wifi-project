@@ -92,7 +92,7 @@ router.post('/:id/simulate-confirm', async (req, res) => {
 
     const result = await PaymentService.simulateConfirmation(req.params.id);
     res.json({
-      message: 'Payment confirmed and Wi-Fi access provisioned!',
+      message: 'Payment confirmed and voucher issued. Follow the access instructions shown by the portal.',
       voucherCode: result.rawCode,
       accessMode: result.accessMode,
       voucherStatus: result.voucher.status,
