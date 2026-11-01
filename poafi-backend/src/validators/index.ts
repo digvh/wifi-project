@@ -36,7 +36,7 @@ export const createRouterSchema = z.object({
   apiPort: z.coerce.number().int().min(1).max(65535).default(8728),
   username: z.string().min(1, 'Username is required'),
   password: z.string().min(1, 'Password is required'),
-  vendor: z.string().trim().min(2).max(50).regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/).transform((value) => value.toUpperCase().replace(/[\\s-]+/g, '_')).default('MIKROTIK'),
+  vendor: z.string().trim().min(2).max(50).regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/).transform((value) => value.toUpperCase().replace(/[\s-]+/g, '_')).default('MIKROTIK'),
 });
 
 export const updateRouterSchema = z.object({
@@ -50,7 +50,7 @@ export const updateRouterSchema = z.object({
   apiPort: z.coerce.number().int().min(1).max(65535).optional(),
   username: z.string().min(1).optional(),
   password: z.string().min(1).optional(),
-  vendor: z.string().trim().min(2).max(50).regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/).transform((value) => value.toUpperCase().replace(/[\\s-]+/g, '_')).optional(),
+  vendor: z.string().trim().min(2).max(50).regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/).transform((value) => value.toUpperCase().replace(/[\s-]+/g, '_')).optional(),
 });
 
 // Packages
