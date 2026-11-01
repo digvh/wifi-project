@@ -206,7 +206,7 @@ export class PaymentService {
       if (claimed.count !== 1) {
         const current = await tx.payment.findUnique({ where: { id: payment.id }, include: { voucher: true } });
         if (current?.status === 'SUCCESS' && current.voucher) {
-          return { payment: current, voucher: current.voucher };
+          return { payment: current, voucher: current.voucher, alreadyProcessed: true };
         }
         throw new Error('Payment was already processed by another request');
       }
@@ -232,8 +232,20 @@ export class PaymentService {
         data: { voucherId: voucher.id },
       });
 
-      return { payment: updatedPayment, voucher };
+      return { payment: updatedPayment, voucher, alreadyProcessed: false };
     });
+
+    // A duplicate webhook must return the original voucher. Do not provision a
+    // different generated code or send another SMS receipt.
+    if (result.alreadyProcessed) {
+      const originalCode = decryptSecret(result.voucher.encryptedCode);
+      return {
+        payment: result.payment,
+        voucher: result.voucher,
+        rawCode: originalCode,
+        accessMode,
+      };
+    }
 
     // Native drivers provision now and activate the timer only after they
     // report success. RADIUS devices authenticate the unused voucher later.
@@ -348,7 +360,7 @@ export class PaymentService {
           where: {
             tenantId: payment.tenantId,
             status: 'ONLINE',
-            ...(payment.package.routerId ? { id: (payment as any).package.routerId } : {}),
+            ...(payment.package.routerId ? { id: payment.package.routerId } : {}),
           },
         })
       : null;
