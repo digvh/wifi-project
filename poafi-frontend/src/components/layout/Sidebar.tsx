@@ -11,7 +11,8 @@ import {
   Package, 
   ClipboardCheck,
   Globe,
-  Network
+  Network,
+  Settings2
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
