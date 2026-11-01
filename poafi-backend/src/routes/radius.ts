@@ -177,6 +177,9 @@ router.post('/authorize', radiusRestAuthorized, async (req, res) => {
     res.json({
       'control:Cleartext-Password': { value: [username], do_xlat: false },
       'reply:Session-Timeout': { value: [remainingSeconds], do_xlat: false },
+      // WISPr rates are expressed in bits per second, while PoaFi stores Kbps.
+      'reply:WISPr-Bandwidth-Max-Up': { value: [voucher.package.uploadKbps * 1000], do_xlat: false },
+      'reply:WISPr-Bandwidth-Max-Down': { value: [voucher.package.downloadKbps * 1000], do_xlat: false },
       'reply:Filter-Id': { value: [filterId], do_xlat: false },
       'reply:Reply-Message': { value: ['PoaFi voucher accepted'], do_xlat: false },
     });
