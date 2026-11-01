@@ -8,6 +8,13 @@ const envSchema = z.object({
   JWT_SECRET: z.string(),
   CREDENTIAL_ENCRYPTION_KEY: z.string().length(32),
 
+  // Optional FreeRADIUS bridge. Keep disabled until the separate RADIUS
+  // service is deployed and its internal shared secret is configured.
+  RADIUS_ENABLED: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(false),
+  RADIUS_SERVER_HOST: z.string().optional(),
+  RADIUS_REST_SHARED_SECRET: z.string().min(32).optional(),
+  PUBLIC_APP_URL: z.string().url().optional(),
+
   // Platform Master Payment Gateway (Mode B: Central Aggregation)
   AZAMPAY_APP_NAME: z.string().optional(),
   AZAMPAY_CLIENT_ID: z.string().optional(),
