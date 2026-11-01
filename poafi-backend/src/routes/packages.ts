@@ -100,6 +100,17 @@ router.post('/', validate(createPackageSchema), async (req, res) => {
       return;
     }
 
+    if (routerId) {
+      const linkedRouter = await prisma.router.findFirst({
+        where: { id: routerId, tenantId: targetTenantId },
+        select: { id: true },
+      });
+      if (!linkedRouter) {
+        res.status(400).json({ error: 'The selected router does not belong to this Operator' });
+        return;
+      }
+    }
+
     const newPackage = await prisma.package.create({
       data: {
         tenantId: targetTenantId,
@@ -133,6 +144,17 @@ router.put('/:id', validate(updatePackageSchema), async (req, res) => {
     if (req.user?.role !== 'PLATFORM_ADMIN' && existingPackage.tenantId !== req.user?.tenantId) {
       res.status(403).json({ error: 'Forbidden: You do not own this package' });
       return;
+    }
+
+    if (routerId) {
+      const linkedRouter = await prisma.router.findFirst({
+        where: { id: routerId, tenantId: existingPackage.tenantId },
+        select: { id: true },
+      });
+      if (!linkedRouter) {
+        res.status(400).json({ error: 'The selected router does not belong to this Operator' });
+        return;
+      }
     }
 
     const updated = await prisma.package.update({

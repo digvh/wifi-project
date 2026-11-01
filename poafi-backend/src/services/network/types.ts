@@ -11,7 +11,7 @@ export interface RouterConnectionConfig {
   port: number;
   username: string;
   password: string;
-  extraConfig?: Record<string, any>;
+  extraConfig?: Record<string, unknown>;
 }
 
 export interface RouterTestResult {

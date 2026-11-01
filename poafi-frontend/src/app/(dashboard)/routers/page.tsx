@@ -13,6 +13,22 @@ const VENDORS = [
   { value: "WAVLINK", label: "Wavlink", defaultPort: 80, color: "text-purple-400 border-purple-500/30 bg-purple-500/10" },
 ];
 
+const ROUTER_ENDPOINT_CATEGORIES = ["ROUTER", "GATEWAY", "CONTROLLER"];
+
+function vendorKeyForBrand(brand: string) {
+  const compact = brand.toLowerCase().replace(/[^a-z0-9]/g, "");
+  const known: Record<string, string> = {
+    mikrotik: "MIKROTIK",
+    tplink: "TPLINK_OMADA",
+    ruijie: "RUIJIE",
+    reyee: "RUIJIE",
+    cudy: "CUDY",
+    comfast: "COMFAST",
+    wavlink: "WAVLINK",
+  };
+  return known[compact] || brand.trim().toUpperCase().replace(/[^A-Z0-9]+/g, "_");
+}
+
 export default function RoutersPage() {
   const { user } = useAuth();
   const isSuperAdmin = user?.role === "PLATFORM_ADMIN";
@@ -20,6 +36,8 @@ export default function RoutersPage() {
   const [routers, setRouters] = useState<any[]>([]);
   const [tenants, setTenants] = useState<any[]>([]);
   const [deviceModels, setDeviceModels] = useState<any[]>([]);
+  const [vendorOptions, setVendorOptions] = useState<any[]>(VENDORS);
+  const [integrationInfo, setIntegrationInfo] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     tenantId: "",
     deviceModelId: "",
@@ -44,8 +62,29 @@ export default function RoutersPage() {
 
   const fetchData = async () => {
     try {
-      const catalogueData = await apiFetch("/device-catalog");
-      setDeviceModels(catalogueData.devices || []);
+      const [catalogueData, capabilityData] = await Promise.all([
+        apiFetch("/device-catalog"),
+        apiFetch("/routers/integration-capabilities"),
+      ]);
+      const models = catalogueData.devices || [];
+      const capabilities = capabilityData.integrations || [];
+      setDeviceModels(models);
+      setIntegrationInfo(capabilities);
+
+      const eligibleBrands: string[] = Array.from(new Set<string>(
+        models
+          .filter((model: any) => ROUTER_ENDPOINT_CATEGORIES.includes(String(model.category).toUpperCase()))
+          .map((model: any): string => String(model.brand))
+      ));
+      const additionalVendors = eligibleBrands
+        .map((brand) => ({
+          value: vendorKeyForBrand(brand),
+          label: brand,
+          defaultPort: 443,
+          color: "text-gray-300 border-white/10 bg-white/5",
+        }))
+        .filter((option) => !VENDORS.some((known) => known.value === option.value));
+      setVendorOptions([...VENDORS, ...additionalVendors]);
       if (isSuperAdmin) {
         const [routersData, tenantsData] = await Promise.all([
           apiFetch("/routers"),
@@ -75,11 +114,11 @@ export default function RoutersPage() {
   }, [user]);
 
   const handleVendorChange = (vendor: string) => {
-    const target = VENDORS.find((v) => v.value === vendor);
+    const target = vendorOptions.find((v) => v.value === vendor);
     setFormData((prev) => ({
       ...prev,
       vendor,
-      apiPort: target ? target.defaultPort : 8728,
+      apiPort: target ? target.defaultPort : 443,
     }));
   };
 
@@ -251,11 +290,11 @@ export default function RoutersPage() {
                 className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white focus:border-[#00f3ff] outline-none font-medium text-sm"
                 required
               >
-                {VENDORS.map((v) => (
-                  <option key={v.value} value={v.value}>
-                    {v.label}
-                  </option>
-                ))}
+                {vendorOptions.map((v) => {
+                  const integration = integrationInfo.find((item) => item.vendor === v.value);
+                  const stateLabel = integration?.driverAvailable ? " — LIVE DRIVER" : " — INVENTORY ONLY / DRIVER PENDING";
+                  return <option key={v.value} value={v.value}>{v.label}{stateLabel}</option>;
+                })}
               </select>
             </div>
 
@@ -267,9 +306,11 @@ export default function RoutersPage() {
                 className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white focus:border-[#00f3ff] outline-none text-sm"
               >
                 <option value="">Select model or register without catalogue link</option>
-                {deviceModels.map((model) => (
-                  <option key={model.id} value={model.id}>{model.brand} {model.model} — {model.category}</option>
-                ))}
+                {deviceModels
+                  .filter((model) => ROUTER_ENDPOINT_CATEGORIES.includes(String(model.category).toUpperCase()))
+                  .map((model) => (
+                    <option key={model.id} value={model.id}>{model.brand} {model.model} — {model.category}</option>
+                  ))}
               </select>
               <p className="text-[11px] text-gray-500 mt-1">Choose the exact model of the physical device. Add it to Device Catalogue first if it is missing.</p>
             </div>
@@ -384,7 +425,11 @@ export default function RoutersPage() {
           <div className="space-y-4">
             {routers.length === 0 && <p className="text-gray-400 text-sm">No routers added yet.</p>}
             {routers.map((r) => {
-              const vendorMeta = VENDORS.find((v) => v.value === r.vendor) || VENDORS[0];
+              const vendorMeta = vendorOptions.find((v) => v.value === r.vendor) || {
+                label: r.vendor,
+                color: "text-gray-300 border-white/10 bg-white/5",
+              };
+              const driverAvailable = integrationInfo.some((item) => item.vendor === r.vendor && item.driverAvailable);
               return (
                 <div
                   key={r.id}
@@ -438,17 +483,20 @@ export default function RoutersPage() {
                     >Edit</button>
                     <button
                       onClick={() => viewSessions(r.id)}
-                      className="bg-white/5 hover:bg-white/10 text-gray-300 text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors border border-white/5"
+                      disabled={!driverAvailable}
+                      title={driverAvailable ? "View live sessions" : "This vendor's live API adapter is not implemented"}
+                      className="bg-white/5 hover:bg-white/10 text-gray-300 text-xs px-3 py-2 rounded-lg flex items-center gap-1.5 transition-colors border border-white/5 disabled:opacity-40 disabled:cursor-not-allowed"
                     >
                       <Users size={14} /> Sessions
                     </button>
 
                     <button
                       onClick={() => handleTest(r.id)}
-                      disabled={testingId === r.id}
-                      className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-lg transition-colors disabled:opacity-50"
+                      disabled={testingId === r.id || !driverAvailable}
+                      title={driverAvailable ? "Test the registered vendor adapter" : "This vendor's live API adapter is not implemented"}
+                      className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {testingId === r.id ? "Testing..." : "Test Connection"}
+                      {testingId === r.id ? "Testing..." : driverAvailable ? "Test Connection" : "Integration Pending"}
                     </button>
 
                     <button

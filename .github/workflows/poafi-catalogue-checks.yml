@@ -2,7 +2,6 @@ name: PoaFi catalogue checks
 
 on:
   pull_request:
-    branches: [main, master]
     paths:
       - "poafi-backend/**"
       - "poafi-frontend/**"
@@ -33,6 +32,8 @@ jobs:
         run: npx prisma validate
       - name: Generate Prisma client
         run: npx prisma generate
+      - name: Run network integration tests
+        run: npm test
       - name: Compile backend
         run: npm run build
 

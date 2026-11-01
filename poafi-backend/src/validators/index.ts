@@ -36,7 +36,7 @@ export const createRouterSchema = z.object({
   apiPort: z.coerce.number().int().min(1).max(65535).default(8728),
   username: z.string().min(1, 'Username is required'),
   password: z.string().min(1, 'Password is required'),
-  vendor: z.enum(['MIKROTIK', 'TPLINK_OMADA', 'RUIJIE', 'CUDY', 'COMFAST', 'WAVLINK']).default('MIKROTIK'),
+  vendor: z.string().trim().min(2).max(50).regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/).transform((value) => value.toUpperCase().replace(/[\s-]+/g, '_')).default('MIKROTIK'),
 });
 
 export const updateRouterSchema = z.object({
@@ -44,19 +44,18 @@ export const updateRouterSchema = z.object({
   siteName: z.string().max(120).optional().nullable(),
   installationAddress: z.string().max(500).optional().nullable(),
   connectionMode: z.enum(['DIRECT', 'VPN', 'SECURE_TUNNEL', 'CLOUD_CONTROLLER']).optional(),
-  setupStatus: z.enum(['PENDING', 'IN_PROGRESS', 'CONFIGURED', 'NEEDS_ATTENTION']).optional(),
   installationNotes: z.string().max(2000).optional().nullable(),
   name: z.string().min(1).max(100).optional(),
   host: z.string().min(1).optional(),
   apiPort: z.coerce.number().int().min(1).max(65535).optional(),
   username: z.string().min(1).optional(),
   password: z.string().min(1).optional(),
-  vendor: z.enum(['MIKROTIK', 'TPLINK_OMADA', 'RUIJIE', 'CUDY', 'COMFAST', 'WAVLINK']).optional(),
-  status: z.string().optional(),
+  vendor: z.string().trim().min(2).max(50).regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/).transform((value) => value.toUpperCase().replace(/[\s-]+/g, '_')).optional(),
 });
 
 // Packages
 export const createPackageSchema = z.object({
+  tenantId: z.string().uuid().optional(),
   name: z.string().min(1, 'Package name is required').max(100),
   priceTzs: z.coerce.number().int().min(0, 'Price must be positive'),
   durationMinutes: z.coerce.number().int().min(1, 'Duration must be at least 1 minute'),
