@@ -220,7 +220,7 @@ export class PaymentService {
           packageId: payment.packageId,
           codeHash,
           encryptedCode,
-          status: accessMode === 'NATIVE' ? 'UNUSED' : 'UNUSED',
+          status: 'UNUSED',
           activatedAt: null,
           expiresAt: null,
           usedByIp: payment.phoneNumber,
@@ -332,6 +332,32 @@ export class PaymentService {
       voucherCode = decryptSecret(payment.voucher.encryptedCode);
     }
 
+    const radiusAvailable = env.RADIUS_ENABLED
+      ? await prisma.radiusNas.count({
+          where: {
+            tenantId: payment.tenantId,
+            isActive: true,
+            OR: (payment as any).package?.routerId
+              ? [{ routerId: null }, { routerId: (payment as any).package.routerId }]
+              : undefined,
+          },
+        })
+      : 0;
+    const nativeRouter = !radiusAvailable
+      ? await prisma.router.findFirst({
+          where: {
+            tenantId: payment.tenantId,
+            status: 'ONLINE',
+            ...((payment as any).package?.routerId ? { id: (payment as any).package.routerId } : {}),
+          },
+        })
+      : null;
+    const accessMode = radiusAvailable > 0
+      ? 'RADIUS'
+      : nativeRouter && RouterAdapterFactory.hasAdapter(nativeRouter.vendor)
+        ? 'NATIVE'
+        : 'MANUAL';
+
     return {
       paymentId: payment.id,
       reference: payment.reference,
@@ -342,6 +368,8 @@ export class PaymentService {
       packageName: payment.package.name,
       durationMinutes: payment.package.durationMinutes,
       voucherCode,
+      accessMode,
+      voucherStatus: payment.voucher?.status,
       activatedAt: payment.voucher?.activatedAt,
       expiresAt: payment.voucher?.expiresAt,
     };
