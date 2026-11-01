@@ -88,7 +88,6 @@ router.post('/resolve-client', radiusRestAuthorized, async (req, res) => {
       'control:FreeRADIUS-Client-Shortname': { value: [nas.shortname], do_xlat: false },
       'control:FreeRADIUS-Client-NAS-Type': { value: [nas.type], do_xlat: false },
       'control:FreeRADIUS-Client-Virtual-Server': { value: ['default'], do_xlat: false },
-      'control:FreeRADIUS-Client-Require-MA': { value: ['no'], do_xlat: false },
     });
   } catch (error) {
     console.error('RADIUS client discovery failed:', error);
