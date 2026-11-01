@@ -11,6 +11,7 @@ CREATE TABLE "radius_nas" (
   "type" VARCHAR(30) NOT NULL DEFAULT 'other',
   "encryptedSecret" TEXT NOT NULL,
   "description" VARCHAR(200),
+  "isActive" BOOLEAN NOT NULL DEFAULT true,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "radius_nas_pkey" PRIMARY KEY ("id")
 );
