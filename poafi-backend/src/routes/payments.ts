@@ -95,6 +95,7 @@ router.post('/:id/simulate-confirm', async (req, res) => {
       message: 'Payment confirmed and Wi-Fi access provisioned!',
       voucherCode: result.rawCode,
       accessMode: result.accessMode,
+      voucherStatus: result.voucher.status,
       status: 'SUCCESS',
     });
   } catch (error: any) {
