@@ -52,6 +52,42 @@ The code is not yet a universal multi-vendor router/device platform.
 
 Never commit `.env`, controller Client Secrets, device passwords, JWT secrets or encryption keys. Never send secrets into chat or GitHub issues. Keep integration secrets in backend-only encrypted configuration. Begin with read-only controller permissions. Use a staging database and dedicated test devices/accounts.
 
+
+## Operator-first RADIUS onboarding (new phase)
+
+A common integration route has now been added so an Operator can select a vendor/model and register a RADIUS-capable hotspot gateway/controller without waiting for a native vendor API driver.
+
+Branch: `feature/operator-radius-hotspot-onboarding`
+
+### Added
+- Operator navigation page: `/network-setup`.
+- Vendor/model capture for MikroTik, TP-Link Omada, Ruijie/Reyee, Ubiquiti/UniFi, Grandstream, Cudy, Comfast, Wavlink and generic RADIUS equipment.
+- Tenant-scoped RADIUS NAS registry with random per-device shared secrets encrypted at rest; the secret is shown only at creation/rotation.
+- FreeRADIUS 3 container under `poafi-radius/`, using dynamic client discovery through the private PoaFi backend API.
+- RADIUS PAP voucher authorization and accounting Start/Interim-Update/Stop endpoint handlers.
+- Access-Accept includes Session-Timeout and WISPr upload/download bandwidth attributes (bits per second), plus Filter-Id for NAS products that use local profile mappings.
+- RADIUS vouchers are left UNUSED after payment/batch generation and start their countdown only on the first successful NAS authentication.
+- Payment portal now distinguishes a RADIUS voucher that still needs to be entered on the Wi-Fi login page from a native adapter connection.
+
+### Deploy (staging only)
+1. Set `RADIUS_ENABLED=true`, `RADIUS_SERVER_HOST`, and a private random `RADIUS_REST_SHARED_SECRET` of at least 32 characters in backend env.
+2. Set the same REST bridge secret and private backend URL in `poafi-radius/.env` (start from `.env.radius.example`).
+3. Build and start `docker compose --env-file .env -f compose.yml up --build -d` from `poafi-radius/`.
+4. Expose UDP 1812 (authentication) and 1813 (accounting) only to intended NAS devices. Prefer a private VPN; RADIUS over ordinary UDP is not transport encryption.
+5. Migrate and generate Prisma client in backend, then open `/network-setup` and register the static IPv4 source address seen by the RADIUS server.
+6. Configure the device's built-in captive portal to use RADIUS PAP and accounting Start/Interim-Update/Stop. Use the one-time secret displayed by PoaFi.
+7. Create a test package and disposable voucher. Login through the device's own hotspot page and verify the voucher becomes ACTIVE and accounting updates appear.
+
+### Critical compatibility boundaries
+- This is a generic RADIUS path only for device models/firmware that support external RADIUS PAP captive-portal authentication and accounting.
+- It does not install or configure SSIDs, VLANs, radio settings, captive portal redirects, device controller adoption, or remote VPN tunnels.
+- WISPr bandwidth attributes are standard but not universal. If a NAS does not enforce them, the Operator must map PoaFi's Filter-Id to a local bandwidth profile. Exact support must be checked against the model and firmware.
+- Session-Timeout requires the NAS to enforce its received value. RADIUS CoA/Disconnect-Message is not implemented in this phase.
+- RADIUS client registry v1 requires a fixed IPv4 source address visible to the RADIUS server. Multiple devices behind one NAT IP share one NAS identity in this version; do not register the same address to different Operators.
+- RADIUS PAP is not 802.1X/EAP. No CHAP/MS-CHAP/EAP support is claimed.
+- The current code and service have not been physically tested against any vendor's hardware. Treat PR/CI success as software validation only, not proof of hardware compatibility.
+- Live payments remain disabled.
+
 ## Current support matrix
 
 | Platform | Connection test | Voucher provisioning | Active sessions | State |
