@@ -160,18 +160,16 @@ model Payment {
 /// `nas` table so FreeRADIUS can authenticate known clients by source IP and
 /// shared secret. The shared secret is only returned once by the API.
 model RadiusNas {
-  id          Int      @id @default(autoincrement())
-  tenantId    String   @map("tenant_id")
-  routerId    String?  @map("router_id")
-  name        String
-  nasname     String   @unique @db.VarChar(128)
-  shortname   String   @db.VarChar(32)
-  type        String   @default("other") @db.VarChar(30)
-  secret      String   @db.VarChar(60)
-  server      String?  @db.VarChar(64)
-  community   String?  @db.VarChar(50)
-  description String?  @db.VarChar(200)
-  createdAt   DateTime @default(now()) @map("created_at")
+  id              String   @id @default(uuid())
+  tenantId        String
+  routerId        String?
+  name            String
+  nasname         String   @unique @db.VarChar(128)
+  shortname       String   @db.VarChar(32)
+  type            String   @default("other") @db.VarChar(30)
+  encryptedSecret String   @db.Text
+  description     String?  @db.VarChar(200)
+  createdAt       DateTime @default(now())
 
   tenant   Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   router   Router?        @relation(fields: [routerId], references: [id], onDelete: SetNull)
@@ -179,13 +177,13 @@ model RadiusNas {
 
   @@index([tenantId])
   @@index([routerId])
-  @@map("nas")
+  @@map("radius_nas")
 }
 
 /// RADIUS accounting snapshots received from network access servers.
 model RadiusSession {
   id                 String    @id @default(uuid())
-  nasId              Int
+  nasId              String
   voucherId          String?
   acctSessionId      String
   username           String
