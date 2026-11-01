@@ -5,6 +5,8 @@ CREATE TABLE "radius_nas" (
   "id" TEXT NOT NULL,
   "tenantId" TEXT NOT NULL,
   "routerId" TEXT,
+  "vendor" TEXT NOT NULL DEFAULT 'GENERIC',
+  "model" TEXT,
   "name" TEXT NOT NULL,
   "nasname" VARCHAR(128) NOT NULL,
   "shortname" VARCHAR(32) NOT NULL,
