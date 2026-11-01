@@ -2,12 +2,32 @@ import { Router } from 'express';
 import { prisma } from '../config/database';
 import { requireAuth } from '../middleware/auth';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
-import { RouterAdapterFactory } from '../services/network';
+import { RouterAdapterFactory, ROUTER_ENDPOINT_CATEGORIES, VENDOR_INTEGRATIONS, validateRouterEndpointModel } from '../services/network';
 import { validate } from '../middleware/validate';
 import { createRouterSchema, updateRouterSchema } from '../validators';
 
 const router = Router();
 router.use(requireAuth);
+
+async function validateLinkedDeviceModel(deviceModelId: string, vendor: string): Promise<string | null> {
+  const model = await prisma.networkDeviceModel.findUnique({ where: { id: deviceModelId } });
+  if (!model) return 'Selected device model was not found in the catalogue';
+  const validation = validateRouterEndpointModel(vendor, model);
+  return validation.valid ? null : validation.reason;
+}
+
+// Expose the real driver state so the UI and operators can distinguish a catalogue
+// brand from a vendor whose API is actually implemented in PoaFi.
+router.get('/integration-capabilities', (_req, res) => {
+  res.json({
+    integrations: VENDOR_INTEGRATIONS.map((integration) => ({
+      ...integration,
+      driverAvailable: RouterAdapterFactory.hasAdapter(integration.vendor),
+    })),
+    registeredDrivers: RouterAdapterFactory.getRegisteredVendors(),
+    routerEndpointCategories: ROUTER_ENDPOINT_CATEGORIES,
+  });
+});
 
 // Create a new Router
 router.post('/', validate(createRouterSchema), async (req, res) => {
@@ -23,9 +43,10 @@ router.post('/', validate(createRouterSchema), async (req, res) => {
       return;
     }
 
+    const normalizedVendor = String(vendor || 'MIKROTIK').trim().toUpperCase();
     if (deviceModelId) {
-      const model = await prisma.networkDeviceModel.findUnique({ where: { id: deviceModelId } });
-      if (!model) { res.status(400).json({ error: 'Selected device model was not found in the catalogue' }); return; }
+      const modelError = await validateLinkedDeviceModel(deviceModelId, normalizedVendor);
+      if (modelError) { res.status(400).json({ error: modelError }); return; }
     }
 
     const encryptedPassword = encryptSecret(password);
@@ -43,7 +64,7 @@ router.post('/', validate(createRouterSchema), async (req, res) => {
         apiPort: apiPort ? parseInt(apiPort) : 8728,
         username,
         encryptedPassword,
-        vendor: (vendor || 'MIKROTIK').toUpperCase(),
+        vendor: normalizedVendor,
       },
     });
 
@@ -101,7 +122,7 @@ router.get('/', async (req, res) => {
 router.put('/:id', validate(updateRouterSchema), async (req, res) => {
   try {
     const routerId = req.params.id;
-    const { deviceModelId, siteName, installationAddress, connectionMode, setupStatus, installationNotes, name, host, apiPort, username, password, vendor, status } = req.body;
+    const { deviceModelId, siteName, installationAddress, connectionMode, installationNotes, name, host, apiPort, username, password, vendor } = req.body;
 
     const existingRouter = await prisma.router.findUnique({ where: { id: routerId } });
     if (!existingRouter) {
@@ -114,9 +135,11 @@ router.put('/:id', validate(updateRouterSchema), async (req, res) => {
       return;
     }
 
-    if (deviceModelId) {
-      const model = await prisma.networkDeviceModel.findUnique({ where: { id: deviceModelId } });
-      if (!model) { res.status(400).json({ error: 'Selected device model was not found in the catalogue' }); return; }
+    const nextModelId = deviceModelId !== undefined ? deviceModelId : existingRouter.deviceModelId;
+    const nextVendor = vendor !== undefined ? vendor : existingRouter.vendor;
+    if (nextModelId) {
+      const modelError = await validateLinkedDeviceModel(nextModelId, nextVendor);
+      if (modelError) { res.status(400).json({ error: modelError }); return; }
     }
 
     const updateData: any = {};
@@ -124,16 +147,28 @@ router.put('/:id', validate(updateRouterSchema), async (req, res) => {
     if (siteName !== undefined) updateData.siteName = siteName;
     if (installationAddress !== undefined) updateData.installationAddress = installationAddress;
     if (connectionMode !== undefined) updateData.connectionMode = connectionMode;
-    if (setupStatus !== undefined) updateData.setupStatus = setupStatus;
     if (installationNotes !== undefined) updateData.installationNotes = installationNotes;
     if (name !== undefined) updateData.name = name;
     if (host !== undefined) updateData.host = host;
     if (apiPort !== undefined) updateData.apiPort = parseInt(apiPort);
     if (username !== undefined) updateData.username = username;
     if (vendor !== undefined) updateData.vendor = vendor.toUpperCase();
-    if (status !== undefined) updateData.status = status;
     if (password) {
       updateData.encryptedPassword = encryptSecret(password);
+    }
+
+    // A changed management endpoint invalidates the last connection result and
+    // requires a fresh test/provisioning workflow before the router is trusted.
+    const connectionFieldsChanged =
+      (vendor !== undefined && vendor !== existingRouter.vendor) ||
+      (deviceModelId !== undefined && deviceModelId !== existingRouter.deviceModelId) ||
+      (host !== undefined && host !== existingRouter.host) ||
+      (apiPort !== undefined && Number(apiPort) !== existingRouter.apiPort) ||
+      (username !== undefined && username !== existingRouter.username) ||
+      Boolean(password);
+    if (connectionFieldsChanged) {
+      updateData.status = 'UNKNOWN';
+      updateData.setupStatus = 'NEEDS_ATTENTION';
     }
 
     const updated = await prisma.router.update({
