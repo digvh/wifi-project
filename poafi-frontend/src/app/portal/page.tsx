@@ -162,7 +162,9 @@ function PortalContent() {
 
     const interval = setInterval(async () => {
       try {
-        const res = await apiFetch(`/payments/${checkoutData.paymentId}/status`);
+        const res = await apiFetch(`/payments/${checkoutData.paymentId}/status`, {
+          headers: { "X-Payment-Access-Token": checkoutData.accessToken },
+        });
         if (res.status === "SUCCESS") {
           setPaymentStatus(res);
           setPolling(false);
