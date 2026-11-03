@@ -1,0 +1,13 @@
+-- AlterTable Package
+ALTER TABLE "Package" ADD COLUMN IF NOT EXISTS "dataLimitMb" INTEGER;
+ALTER TABLE "Package" ADD COLUMN IF NOT EXISTS "type" TEXT NOT NULL DEFAULT 'TIME';
+ALTER TABLE "Package" ADD COLUMN IF NOT EXISTS "validityDays" INTEGER;
+
+-- AlterTable Voucher
+ALTER TABLE "Voucher" ADD COLUMN IF NOT EXISTS "prefix" TEXT;
+ALTER TABLE "Voucher" ADD COLUMN IF NOT EXISTS "isImported" BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE "Voucher" ADD COLUMN IF NOT EXISTS "issuedAt" TIMESTAMP(3);
+
+-- CreateIndex
+CREATE INDEX IF NOT EXISTS "Voucher_batchId_idx" ON "Voucher"("batchId");
+

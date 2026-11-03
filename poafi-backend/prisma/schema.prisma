@@ -30,20 +30,58 @@ model User {
 }
 
 model Router {
-  id                String   @id @default(uuid())
-  tenantId          String
-  name              String
-  vendor            String   @default("MIKROTIK")
-  host              String
-  apiPort           Int      @default(8728)
-  username          String
-  encryptedPassword String
-  status            String   @default("UNKNOWN")
-  
-  tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  packages          Package[]
+  id                  String   @id @default(uuid())
+  tenantId            String
+  name                String
+  vendor              String   @default("MIKROTIK")
+  host                String
+  apiPort             Int      @default(8728)
+  username            String
+  encryptedPassword   String
+  status              String   @default("UNKNOWN")
+  deviceModelId       String?
+  siteName            String?
+  installationAddress String?
+  connectionMode      String   @default("DIRECT")
+  setupStatus         String   @default("PENDING")
+  installationNotes   String?
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  packages     Package[]
+  deviceModel  NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
+  @@index([deviceModelId])
+}
+
+model NetworkDeviceModel {
+  id                 String   @id @default(uuid())
+  brand              String
+  model              String
+  category           String
+  subcategory        String?
+  environment        String   @default("INDOOR")
+  coverageMeters     Int?
+  coverageNote       String?
+  frequencyBands     String[] @default([])
+  wifiStandard       String?
+  maxClients         Int?
+  maxSpeedMbps       Int?
+  antenna            String?
+  poe                String?
+  ipRating           String?
+  managementPlatform String?
+  hotspotSupport     Boolean  @default(false)
+  notes              String?
+  sourceUrl          String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  routers            Router[]
+
+  @@unique([brand, model])
+  @@index([category])
+  @@index([brand])
+  @@index([coverageMeters])
 }
 
 model Package {
@@ -55,11 +93,14 @@ model Package {
   durationMinutes Int
   downloadKbps    Int       @default(3000)
   uploadKbps      Int       @default(1000)
+  dataLimitMb     Int?
+  type            String    @default("TIME")
+  validityDays    Int?
 
-  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  router          Router?   @relation(fields: [routerId], references: [id])
-  vouchers        Voucher[]
-  payments        Payment[]
+  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  router    Router?   @relation(fields: [routerId], references: [id])
+  vouchers  Voucher[]
+  payments  Payment[]
 
   @@index([tenantId])
 }
@@ -70,19 +111,23 @@ model Voucher {
   tenantId      String
   packageId     String
   codeHash      String    @unique
-  encryptedCode String   
+  encryptedCode String
   status        String    @default("UNUSED")
   activatedAt   DateTime?
   expiresAt     DateTime?
   usedByIp      String?
+  prefix        String?
+  isImported    Boolean   @default(false)
+  issuedAt      DateTime?
   createdAt     DateTime  @default(now())
-  
-  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  package       Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  payment       Payment?
+
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  package  Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  payment  Payment?
 
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([batchId])
 }
 
 model Payment {
@@ -90,22 +135,22 @@ model Payment {
   tenantId        String
   packageId       String
   voucherId       String?   @unique
-  amount          Int       // In TZS
+  amount          Int
   currency        String    @default("TZS")
-  provider        String    // MPESA, TIGOPESA, AIRTEL, HALOPESA, CARD, AZAMPAY
+  provider        String
   phoneNumber     String
-  reference       String    @unique // Internal reconciliation reference e.g. POAF-xxxx
-  externalId      String?   // External transaction ID from AzamPay / Telco
-  status          String    @default("PENDING") // PENDING, SUCCESS, FAILED, CANCELLED
-  accessTokenHash String?   @unique // Hash of short-lived portal polling token; never store raw token
-  metadata        String?   // Stored JSON string
+  reference       String    @unique
+  externalId      String?
+  status          String    @default("PENDING")
+  accessTokenHash String?   @unique
+  metadata        String?
   createdAt       DateTime  @default(now())
   updatedAt       DateTime  @updatedAt
   completedAt     DateTime?
 
-  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  package       Package   @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  voucher       Voucher?  @relation(fields: [voucherId], references: [id])
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  package  Package  @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  voucher  Voucher? @relation(fields: [voucherId], references: [id])
 
   @@index([tenantId])
   @@index([status])
