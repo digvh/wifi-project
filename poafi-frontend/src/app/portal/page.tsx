@@ -39,8 +39,11 @@ const I18N = {
     waitingPin: "Inasubiri uthibitishe kwa PIN kwenye simu yako...",
     connectedTitle: "🎉 Umeunganishwa!",
     connectedSub: "Umefanikiwa kuanzisha kifurushi chako cha intaneti.",
+    voucherReadyTitle: "✅ Vocha Yako Iko Tayari!",
+    voucherReadySub: "Nenda kwenye ukurasa wa kuingia Wi-Fi (sign-in page) na uweke vocha hii ili kuunganishwa. Muda wako utaanza baada ya mtandao kuthibitisha.",
     voucherCodeLabel: "Kodi Yako ya Vocha",
     startBrowsing: "Anza Kutumia Intaneti",
+    goToSignIn: "Nenda Kwenye Ukurasa wa Kuingia",
     cancel: "← Ghairi na chagua kifurushi kingine",
     secured: "Imelindwa na PoaFi Wi-Fi Core",
     testSim: "⚡ Jaribio: Thibitisha Malipo (Bila Makato)",
@@ -63,8 +66,11 @@ const I18N = {
     waitingPin: "Waiting for your PIN confirmation...",
     connectedTitle: "🎉 Connected!",
     connectedSub: "Your Wi-Fi access has been activated on the network gateway.",
+    voucherReadyTitle: "✅ Your Voucher is Ready!",
+    voucherReadySub: "Go to the Wi-Fi sign-in page on this network and enter this voucher to connect. Your time starts when the network accepts your login.",
     voucherCodeLabel: "Your Voucher Code",
     startBrowsing: "Start Browsing",
+    goToSignIn: "Go to Wi-Fi Sign-in Page",
     cancel: "← Cancel and choose different package",
     secured: "Secured by PoaFi Wi-Fi Core",
     testSim: "⚡ Test Lab: Simulate PIN Entry",
@@ -144,11 +150,15 @@ function PortalContent() {
   };
 
   useEffect(() => {
-    if (!polling || !checkoutData?.paymentId) return;
+    if (!polling || !checkoutData?.paymentId || !checkoutData?.accessToken) return;
 
     const interval = setInterval(async () => {
       try {
-        const res = await apiFetch(`/payments/${checkoutData.paymentId}/status`);
+        const res = await apiFetch(`/payments/${checkoutData.paymentId}/status`, {
+          headers: {
+            "X-Payment-Access-Token": checkoutData.accessToken,
+          },
+        });
         if (res.status === "SUCCESS") {
           setPaymentStatus(res);
           setPolling(false);
@@ -171,15 +181,20 @@ function PortalContent() {
   }, [polling, checkoutData, lang]);
 
   const handleSimulatePayment = async () => {
-    if (!checkoutData?.paymentId) return;
+    if (!checkoutData?.paymentId || !checkoutData?.accessToken) return;
     try {
       const res = await apiFetch(`/payments/${checkoutData.paymentId}/simulate-confirm`, {
         method: "POST",
+        headers: {
+          "X-Payment-Access-Token": checkoutData.accessToken,
+        },
       });
       setPaymentStatus({
         ...checkoutData,
         status: "SUCCESS",
         voucherCode: res.voucherCode,
+        accessMode: res.accessMode,
+        voucherStatus: res.voucherStatus,
       });
       setPolling(false);
     } catch (err: any) {
@@ -211,10 +226,16 @@ function PortalContent() {
 
   const selectedPkg = packages.find((p) => p.id === selectedPackageId);
 
+  // Determine success screen variant
+  const isRadiusMode =
+    paymentStatus?.accessMode === "RADIUS" || redeemSuccess?.requiresDeviceLogin === true;
+  const hasSuccess = Boolean(paymentStatus || redeemSuccess);
+  const displayCode = paymentStatus?.voucherCode || voucherCode;
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-[#050510] text-white">
       <div className="w-full max-w-lg space-y-6">
-        {/* Language Switcher Bar */}
+        {/* Language Switcher */}
         <div className="flex justify-end items-center gap-2 text-xs">
           <Globe size={14} className="text-gray-400" />
           <button
@@ -248,20 +269,26 @@ function PortalContent() {
           </p>
         </div>
 
-        {/* Success Screen */}
-        {(paymentStatus || redeemSuccess) && (
+        {/* Success Screen — branches on RADIUS vs native */}
+        {hasSuccess && (
           <div className="glass-panel p-8 text-center space-y-4 border-green-500/30 bg-green-500/10">
             <div className="w-16 h-16 bg-green-500/20 text-green-400 rounded-full flex items-center justify-center mx-auto">
               <CheckCircle2 size={36} />
             </div>
-            <h2 className="text-2xl font-bold text-white">{t.connectedTitle}</h2>
-            <p className="text-sm text-gray-300">{t.connectedSub}</p>
+            <h2 className="text-2xl font-bold text-white">
+              {isRadiusMode ? t.voucherReadyTitle : t.connectedTitle}
+            </h2>
+            <p className="text-sm text-gray-300">
+              {isRadiusMode ? t.voucherReadySub : t.connectedSub}
+            </p>
 
-            {(paymentStatus?.voucherCode || redeemSuccess?.packageName) && (
+            {displayCode && (
               <div className="bg-black/40 p-4 rounded-xl border border-white/10 space-y-1">
-                <span className="text-xs text-gray-400 uppercase tracking-wider">{t.voucherCodeLabel}</span>
+                <span className="text-xs text-gray-400 uppercase tracking-wider">
+                  {t.voucherCodeLabel}
+                </span>
                 <p className="text-2xl font-mono font-bold text-[#00f3ff] tracking-widest">
-                  {paymentStatus?.voucherCode || voucherCode}
+                  {displayCode}
                 </p>
                 <p className="text-xs text-gray-400">
                   {paymentStatus?.durationMinutes || redeemSuccess?.durationMinutes} minutes
@@ -269,22 +296,33 @@ function PortalContent() {
               </div>
             )}
 
-            <a
-              href="https://www.google.com"
-              className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg hover:opacity-95 transition-opacity"
-            >
-              {t.startBrowsing} <ArrowRight size={18} />
-            </a>
+            {isRadiusMode ? (
+              <div className="text-xs text-gray-300 bg-amber-500/10 border border-amber-500/30 p-3 rounded-xl">
+                {lang === "sw"
+                  ? "Bonyeza kitufe cha chini ili kurudi kwenye ukurasa wa kuingia Wi-Fi, kisha uweke vocha hii."
+                  : "Tap below to return to the Wi-Fi sign-in page, then enter this voucher."}
+              </div>
+            ) : (
+              <a
+                href="https://www.google.com"
+                className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold py-3.5 px-8 rounded-xl shadow-lg hover:opacity-95 transition-opacity"
+              >
+                {t.startBrowsing} <ArrowRight size={18} />
+              </a>
+            )}
           </div>
         )}
 
         {/* Normal Portal Form */}
-        {!paymentStatus && !redeemSuccess && (
+        {!hasSuccess && (
           <div className="glass-panel p-6 space-y-6">
             {/* Tabs */}
             <div className="grid grid-cols-2 gap-2 bg-white/5 p-1 rounded-xl border border-white/10">
               <button
-                onClick={() => { setActiveTab("buy"); setError(""); }}
+                onClick={() => {
+                  setActiveTab("buy");
+                  setError("");
+                }}
                 className={`py-2.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
                   activeTab === "buy"
                     ? "bg-[#00f3ff] text-black shadow-lg"
@@ -294,7 +332,10 @@ function PortalContent() {
                 <Smartphone size={16} /> {t.buyTab}
               </button>
               <button
-                onClick={() => { setActiveTab("voucher"); setError(""); }}
+                onClick={() => {
+                  setActiveTab("voucher");
+                  setError("");
+                }}
                 className={`py-2.5 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
                   activeTab === "voucher"
                     ? "bg-[#00f3ff] text-black shadow-lg"
@@ -316,7 +357,6 @@ function PortalContent() {
               <div>
                 {!checkoutData ? (
                   <form onSubmit={handleCheckout} className="space-y-5">
-                    {/* Packages */}
                     <div>
                       <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
                         {t.step1}
@@ -354,7 +394,6 @@ function PortalContent() {
                       )}
                     </div>
 
-                    {/* Providers */}
                     <div>
                       <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
                         {t.step2}
@@ -381,7 +420,6 @@ function PortalContent() {
                       </div>
                     </div>
 
-                    {/* Phone Number */}
                     <div>
                       <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider mb-2">
                         {t.step3}
@@ -432,8 +470,12 @@ function PortalContent() {
                     </div>
 
                     <div className="bg-white/5 p-4 rounded-xl border border-white/10 font-mono text-xs space-y-1">
-                      <p className="text-gray-400">Ref: <span className="text-[#00f3ff]">{checkoutData.reference}</span></p>
-                      <p className="text-gray-400">Amount: <span className="text-white font-bold">TZS {checkoutData.amount?.toLocaleString()}</span></p>
+                      <p className="text-gray-400">
+                        Ref: <span className="text-[#00f3ff]">{checkoutData.reference}</span>
+                      </p>
+                      <p className="text-gray-400">
+                        Amount: <span className="text-white font-bold">TZS {checkoutData.amount?.toLocaleString()}</span>
+                      </p>
                     </div>
 
                     <div className="flex items-center justify-center gap-2 text-xs text-gray-400">
@@ -452,7 +494,10 @@ function PortalContent() {
 
                     <button
                       type="button"
-                      onClick={() => { setCheckoutData(null); setPolling(false); }}
+                      onClick={() => {
+                        setCheckoutData(null);
+                        setPolling(false);
+                      }}
                       className="text-xs text-gray-400 hover:text-white"
                     >
                       {t.cancel}
@@ -510,4 +555,3 @@ export default function PortalPage() {
     </Suspense>
   );
 }
-

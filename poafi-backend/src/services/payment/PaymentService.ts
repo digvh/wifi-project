@@ -12,6 +12,8 @@ import {
   WebhookResult,
 } from './types';
 
+export type PaymentAccessMode = 'RADIUS' | 'NATIVE';
+
 export class PaymentService {
   private static hashAccessToken(token: string): string {
     return crypto.createHash('sha256').update(token).digest('hex');
@@ -32,8 +34,6 @@ export class PaymentService {
           apiKey,
           clientSecret: secret,
           isLive: config.isLive,
-          allowSimulation: env.ALLOW_PAYMENT_SIMULATION,
-          nodeEnv: env.NODE_ENV,
         });
       } catch (e) {
         console.error('Failed to decrypt payment credentials, checking master gateway:', e);
@@ -47,16 +47,23 @@ export class PaymentService {
         apiKey: env.AZAMPAY_API_KEY || '',
         clientSecret: env.AZAMPAY_CLIENT_SECRET,
         isLive: env.AZAMPAY_IS_LIVE,
-        allowSimulation: env.ALLOW_PAYMENT_SIMULATION,
-        nodeEnv: env.NODE_ENV,
       });
     }
 
-    return new AzamPayGateway({
-      isLive: env.AZAMPAY_IS_LIVE,
-      allowSimulation: env.ALLOW_PAYMENT_SIMULATION,
-      nodeEnv: env.NODE_ENV,
+    return new AzamPayGateway();
+  }
+
+  /**
+   * Determines whether this tenant is managed by an external RADIUS server
+   * (universal cross-brand compatibility via FreeRADIUS) or via a native
+   * router adapter (MikroTik direct API).
+   */
+  private static async getAccessModeForTenant(tenantId: string): Promise<PaymentAccessMode> {
+    const radiusNas = await prisma.radiusNas.findFirst({
+      where: { tenantId, isActive: true },
+      select: { id: true },
     });
+    return radiusNas ? 'RADIUS' : 'NATIVE';
   }
 
   static async initiateCheckout(req: CheckoutRequest): Promise<CheckoutResponse> {
@@ -130,10 +137,15 @@ export class PaymentService {
     };
   }
 
-  static async fulfillPayment(reference: string, externalId?: string, expectedAmount?: number): Promise<{
+  static async fulfillPayment(
+    reference: string,
+    externalId?: string,
+    expectedAmount?: number
+  ): Promise<{
     payment: any;
     voucher: any;
     rawCode: string;
+    accessMode: PaymentAccessMode;
   }> {
     const payment = await prisma.payment.findUnique({
       where: { reference },
@@ -152,9 +164,12 @@ export class PaymentService {
       throw new Error('Webhook amount does not match the expected payment amount');
     }
 
+    const accessMode = await this.getAccessModeForTenant(payment.tenantId);
+
+    // Idempotent: if already SUCCESS with voucher, return existing record.
     if (payment.status === 'SUCCESS' && payment.voucher) {
       const rawCode = decryptSecret(payment.voucher.encryptedCode);
-      return { payment, voucher: payment.voucher, rawCode };
+      return { payment, voucher: payment.voucher, rawCode, accessMode };
     }
 
     if (payment.status !== 'PENDING') {
@@ -179,25 +194,45 @@ export class PaymentService {
       });
 
       if (claimed.count !== 1) {
-        const current = await tx.payment.findUnique({ where: { id: payment.id }, include: { voucher: true } });
+        const current = await tx.payment.findUnique({
+          where: { id: payment.id },
+          include: { voucher: true },
+        });
         if (current?.status === 'SUCCESS' && current.voucher) {
           return { payment: current, voucher: current.voucher };
         }
         throw new Error('Payment was already processed by another request');
       }
 
+      // RADIUS tenants: create voucher in UNUSED state. The FreeRADIUS
+      // server activates it on first Access-Request (radius.ts `/authorize`),
+      // setting activatedAt and expiresAt at that moment.
+      //
+      // NATIVE tenants: current behavior — activate immediately and set expiry
+      // because the router adapter provisions the user right away.
       const voucher = await tx.voucher.create({
-        data: {
-          batchId,
-          tenantId: payment.tenantId,
-          packageId: payment.packageId,
-          codeHash,
-          encryptedCode,
-          status: 'ACTIVE',
-          activatedAt: now,
-          expiresAt,
-          usedByIp: payment.phoneNumber,
-        },
+        data:
+          accessMode === 'RADIUS'
+            ? {
+                batchId,
+                tenantId: payment.tenantId,
+                packageId: payment.packageId,
+                codeHash,
+                encryptedCode,
+                status: 'UNUSED',
+                usedByIp: payment.phoneNumber,
+              }
+            : {
+                batchId,
+                tenantId: payment.tenantId,
+                packageId: payment.packageId,
+                codeHash,
+                encryptedCode,
+                status: 'ACTIVE',
+                activatedAt: now,
+                expiresAt,
+                usedByIp: payment.phoneNumber,
+              },
       });
 
       const updatedPayment = await tx.payment.update({
@@ -208,31 +243,35 @@ export class PaymentService {
       return { payment: updatedPayment, voucher };
     });
 
-    try {
-      const routerDevice = await prisma.router.findFirst({
-        where: { tenantId: payment.tenantId, status: 'ONLINE' },
-      });
-
-      if (routerDevice) {
-        const routerPassword = decryptSecret(routerDevice.encryptedPassword);
-        const adapter = RouterAdapterFactory.getAdapter(routerDevice.vendor, {
-          host: routerDevice.host,
-          port: routerDevice.apiPort,
-          username: routerDevice.username,
-          password: routerPassword,
+    // Native router provisioning (skipped for RADIUS tenants — the NAS handles
+    // authentication against the RADIUS server directly).
+    if (accessMode === 'NATIVE') {
+      try {
+        const routerDevice = await prisma.router.findFirst({
+          where: { tenantId: payment.tenantId, status: 'ONLINE' },
         });
 
-        await adapter.provisionUser({
-          username: rawCode,
-          password: rawCode,
-          durationMinutes: payment.package.durationMinutes,
-          downloadKbps: payment.package.downloadKbps,
-          uploadKbps: payment.package.uploadKbps,
-          comment: `PoaFi Pay: ${payment.phoneNumber}`,
-        });
+        if (routerDevice) {
+          const routerPassword = decryptSecret(routerDevice.encryptedPassword);
+          const adapter = RouterAdapterFactory.getAdapter(routerDevice.vendor, {
+            host: routerDevice.host,
+            port: routerDevice.apiPort,
+            username: routerDevice.username,
+            password: routerPassword,
+          });
+
+          await adapter.provisionUser({
+            username: rawCode,
+            password: rawCode,
+            durationMinutes: payment.package.durationMinutes,
+            downloadKbps: payment.package.downloadKbps,
+            uploadKbps: payment.package.uploadKbps,
+            comment: `PoaFi Pay: ${payment.phoneNumber}`,
+          });
+        }
+      } catch (routerErr) {
+        console.error('Auto-provision on router failed after payment:', routerErr);
       }
-    } catch (routerErr) {
-      console.error('Auto-provision on router failed after payment:', routerErr);
     }
 
     try {
@@ -247,10 +286,13 @@ export class PaymentService {
       console.error('Failed to dispatch SMS receipt:', smsErr);
     }
 
-    return { payment: result.payment, voucher: result.voucher, rawCode };
+    return { payment: result.payment, voucher: result.voucher, rawCode, accessMode };
   }
 
-  static async handleWebhook(payload: any, signature?: string): Promise<{ success: boolean; message: string }> {
+  static async handleWebhook(
+    payload: any,
+    signature?: string
+  ): Promise<{ success: boolean; message: string }> {
     const gateway = new AzamPayGateway();
     const result: WebhookResult = gateway.verifyWebhook(payload, signature);
 
@@ -292,6 +334,8 @@ export class PaymentService {
       voucherCode = decryptSecret(payment.voucher.encryptedCode);
     }
 
+    const accessMode = await this.getAccessModeForTenant(payment.tenantId);
+
     return {
       paymentId: payment.id,
       reference: payment.reference,
@@ -302,6 +346,8 @@ export class PaymentService {
       packageName: payment.package.name,
       durationMinutes: payment.package.durationMinutes,
       voucherCode,
+      accessMode,
+      voucherStatus: payment.voucher?.status ?? null,
       activatedAt: payment.voucher?.activatedAt,
       expiresAt: payment.voucher?.expiresAt,
     };

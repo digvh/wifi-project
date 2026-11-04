@@ -1,8 +1,9 @@
 import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import crypto from 'crypto';
 import { prisma } from '../config/database';
-import { requireAuth, requirePlatformAdmin } from '../middleware/auth';
+import { requireAuth } from '../middleware/auth';
 import { isPaymentSimulationAllowed } from '../services/payment/paymentSafety';
 import { validate } from '../middleware/validate';
 import { PaymentService } from '../services/payment/PaymentService';
@@ -67,7 +68,8 @@ router.post('/checkout', checkoutLimiter, validate(checkoutSchema), async (req, 
   }
 });
 
-// Captive Portal polls for payment confirmation using the per-payment secret returned by checkout.
+// Captive Portal polls for payment confirmation using the per-payment secret
+// returned by checkout. Header only — never URL query (leaks in logs, referer).
 router.get('/:id/status', async (req, res) => {
   try {
     const accessToken = req.header('X-Payment-Access-Token');
@@ -83,18 +85,39 @@ router.get('/:id/status', async (req, res) => {
   }
 });
 
-// Development-only simulation. It is never allowed when the platform is configured for live payments.
-router.post('/:id/simulate-confirm', requireAuth, requirePlatformAdmin, async (req, res) => {
+// Development-only simulation. Gated by isPaymentSimulationAllowed (off in prod).
+// Authorized via the same X-Payment-Access-Token used by /status — this lets the
+// captive portal test the full flow without requiring admin login, while remaining
+// strictly disabled when AZAMPAY_IS_LIVE=true or ALLOW_PAYMENT_SIMULATION is false.
+router.post('/:id/simulate-confirm', async (req, res) => {
   try {
     if (!isPaymentSimulationAllowed(env.NODE_ENV, env.ALLOW_PAYMENT_SIMULATION, env.AZAMPAY_IS_LIVE)) {
       res.status(404).json({ error: 'Not found' });
       return;
     }
 
+    const accessToken = req.header('X-Payment-Access-Token');
+    if (typeof accessToken !== 'string' || accessToken.length < 32) {
+      res.status(401).json({ error: 'Payment access token required' });
+      return;
+    }
+
+    const tokenHash = crypto.createHash('sha256').update(accessToken).digest('hex');
+    const payment = await prisma.payment.findFirst({
+      where: { id: req.params.id, accessTokenHash: tokenHash },
+      select: { id: true },
+    });
+    if (!payment) {
+      res.status(404).json({ error: 'Payment not found' });
+      return;
+    }
+
     const result = await PaymentService.simulateConfirmation(req.params.id);
     res.json({
-      message: 'Payment confirmed and Wi-Fi access provisioned!',
+      message: 'Payment confirmed and voucher issued. Follow the access instructions shown by the portal.',
       voucherCode: result.rawCode,
+      accessMode: result.accessMode,
+      voucherStatus: result.voucher.status,
       status: 'SUCCESS',
     });
   } catch (error: any) {
@@ -102,11 +125,9 @@ router.post('/:id/simulate-confirm', requireAuth, requirePlatformAdmin, async (r
   }
 });
 
-// Public Webhook callback from AzamPay / Telco.
-// Provider-specific authentication must be configured once the provider's documented signing scheme is confirmed.
-router.post('/webhook', (req, res) => {
-  // Fail closed: this provider integration has no verified callback-authentication implementation yet.
-  // Do not process untrusted callback payloads into payment success or voucher issuance.
+// Fail closed: no verified provider callback mechanism yet.
+// Do NOT process untrusted payloads into payment success or voucher issuance.
+router.post('/webhook', (_req, res) => {
   res.status(503).json({ error: 'Payment callback verification is not configured' });
 });
 
