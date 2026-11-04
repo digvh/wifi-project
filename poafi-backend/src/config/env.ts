@@ -3,12 +3,24 @@ dotenv.config();
 import { z } from 'zod';
 
 const envSchema = z.object({
-  NODE_ENV: z.string().default('development'),
-  ALLOW_PAYMENT_SIMULATION: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(false),
   PORT: z.coerce.number().default(4000),
   DATABASE_URL: z.string(),
   JWT_SECRET: z.string(),
   CREDENTIAL_ENCRYPTION_KEY: z.string().length(32),
+
+  // Environment + payment safety controls (added by the payment-safety hardening)
+  NODE_ENV: z.string().default('development'),
+  ALLOW_PAYMENT_SIMULATION: z.preprocess(
+    (val) => val === 'true' || val === true,
+    z.boolean()
+  ).default(false),
+
+  // Optional FreeRADIUS bridge. Keep disabled until the separate RADIUS
+  // service is deployed and its internal shared secret is configured.
+  RADIUS_ENABLED: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(false),
+  RADIUS_SERVER_HOST: z.string().optional(),
+  RADIUS_REST_SHARED_SECRET: z.string().min(32).optional(),
+  PUBLIC_APP_URL: z.string().url().optional(),
 
   // Platform Master Payment Gateway (Mode B: Central Aggregation)
   AZAMPAY_APP_NAME: z.string().optional(),

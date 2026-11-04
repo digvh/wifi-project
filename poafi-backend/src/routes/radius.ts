@@ -1,0 +1,529 @@
+import { Router, Request, Response, NextFunction } from 'express';
+import crypto from 'crypto';
+import { isIP } from 'node:net';
+import { z } from 'zod';
+import { prisma } from '../config/database';
+import { env } from '../config/env';
+import { requireAuth } from '../middleware/auth';
+import { encryptSecret, decryptSecret } from '../utils/crypto';
+
+const router = Router();
+
+function radiusRestAuthorized(req: Request, res: Response, next: NextFunction): void {
+  const expected = env.RADIUS_REST_SHARED_SECRET;
+  const provided = req.header('x-poafi-radius-key') || '';
+  if (!env.RADIUS_ENABLED || !expected) {
+    res.status(503).json({ error: 'PoaFi RADIUS service is not enabled or configured' });
+    return;
+  }
+  const expectedBuffer = Buffer.from(expected, 'utf8');
+  const providedBuffer = Buffer.from(provided, 'utf8');
+  if (expectedBuffer.length !== providedBuffer.length || !crypto.timingSafeEqual(expectedBuffer, providedBuffer)) {
+    res.status(401).json({ error: 'Unauthorized RADIUS bridge request' });
+    return;
+  }
+  next();
+}
+
+/** FreeRADIUS 3.x rlm_rest JSON body values are { type, value: [...] }. */
+function radiusValue(body: any, attribute: string): string | undefined {
+  const item = body?.[attribute];
+  const raw = item && typeof item === 'object' && Array.isArray(item.value) ? item.value[0] : item;
+  if (raw === undefined || raw === null || raw === '') return undefined;
+  return String(raw);
+}
+
+function octets(value: string | undefined, gigawords: string | undefined): bigint {
+  const low = value && /^\d+$/.test(value) ? BigInt(value) : 0n;
+  const high = gigawords && /^\d+$/.test(gigawords) ? BigInt(gigawords) : 0n;
+  return high * 4294967296n + low;
+}
+
+function getTenantId(req: Request, requestedTenantId?: string): string | null {
+  const user = (req as any).user as { role?: string; tenantId?: string | null } | undefined;
+  if (user?.role === 'PLATFORM_ADMIN') return requestedTenantId || null;
+  return user?.tenantId || null;
+}
+
+const createClientSchema = z.object({
+  tenantId: z.string().uuid().optional(),
+  routerId: z.string().uuid().optional().nullable(),
+  vendor: z.string().trim().min(2).max(80).default('GENERIC'),
+  model: z.string().trim().max(120).optional().nullable(),
+  name: z.string().trim().min(2).max(100),
+  nasname: z.string().trim().min(1).max(128).refine((value) => isIP(value) === 4, 'Enter the fixed IPv4 address that the RADIUS server will see for this network device'),
+  description: z.string().trim().max(200).optional().nullable(),
+});
+
+const updateClientSchema = z.object({
+  routerId: z.string().uuid().nullable().optional(),
+  vendor: z.string().trim().min(2).max(80).optional(),
+  model: z.string().trim().max(120).nullable().optional(),
+  name: z.string().trim().min(2).max(100).optional(),
+  nasname: z.string().trim().min(1).max(128).refine((value) => isIP(value) === 4, 'Enter a valid IPv4 address').optional(),
+  description: z.string().trim().max(200).nullable().optional(),
+  isActive: z.boolean().optional(),
+});
+
+// Internal endpoints called only by the FreeRADIUS container.
+// They are deliberately defined before requireAuth.
+router.post('/resolve-client', radiusRestAuthorized, async (req, res) => {
+  try {
+    const sourceIp = radiusValue(req.body, 'Packet-Src-IP-Address');
+    if (!sourceIp || isIP(sourceIp) !== 4) {
+      res.status(404).end();
+      return;
+    }
+
+    const nas = await prisma.radiusNas.findUnique({ where: { nasname: sourceIp } });
+    if (!nas || !nas.isActive) {
+      res.status(404).end();
+      return;
+    }
+
+    const sharedSecret = decryptSecret(nas.encryptedSecret);
+    res.json({
+      'control:FreeRADIUS-Client-IP-Address': { value: [nas.nasname], do_xlat: false },
+      'control:FreeRADIUS-Client-Secret': { value: [sharedSecret], do_xlat: false },
+      'control:FreeRADIUS-Client-Shortname': { value: [nas.shortname], do_xlat: false },
+      'control:FreeRADIUS-Client-NAS-Type': { value: [nas.type], do_xlat: false },
+      'control:FreeRADIUS-Client-Virtual-Server': { value: ['default'], do_xlat: false },
+    });
+  } catch (error) {
+    console.error('RADIUS client discovery failed:', error);
+    res.status(500).json({ error: 'RADIUS client discovery failed' });
+  }
+});
+
+router.post('/authorize', radiusRestAuthorized, async (req, res) => {
+  try {
+    const username = radiusValue(req.body, 'User-Name')?.trim().toUpperCase();
+    const password = radiusValue(req.body, 'User-Password');
+    const sourceIp = radiusValue(req.body, 'Packet-Src-IP-Address');
+    // FreeRADIUS has already validated the packet source against the dynamic
+    // client registry. Do not trust a caller-supplied NAS-IP-Address attribute.
+    const nasIp = sourceIp;
+
+    if (!username || !password || !nasIp || isIP(nasIp) !== 4) {
+      res.status(401).json({ error: 'Voucher credentials or NAS identity are missing' });
+      return;
+    }
+
+    // Voucher codes generated by PoaFi are 8 uppercase hexadecimal characters.
+    if (!/^[A-F0-9]{8}$/.test(username) || password.trim().toUpperCase() !== username) {
+      res.status(401).json({ error: 'Invalid voucher credentials' });
+      return;
+    }
+
+    const nas = await prisma.radiusNas.findUnique({
+      where: { nasname: nasIp },
+      include: { tenant: true },
+    });
+    if (!nas || !nas.isActive || !nas.tenant.isActive) {
+      res.status(401).json({ error: 'This network access server is not active in PoaFi' });
+      return;
+    }
+
+    const codeHash = crypto.createHash('sha256').update(username).digest('hex');
+    const voucher = await prisma.voucher.findUnique({
+      where: { codeHash },
+      include: { package: true },
+    });
+    if (!voucher || voucher.tenantId !== nas.tenantId) {
+      res.status(401).json({ error: 'Voucher does not belong to this Operator' });
+      return;
+    }
+
+    if (nas.routerId && voucher.package.routerId && voucher.package.routerId !== nas.routerId) {
+      res.status(401).json({ error: 'Voucher package is assigned to a different gateway' });
+      return;
+    }
+
+    let activeVoucher = voucher;
+    const now = new Date();
+
+    if (voucher.status === 'UNUSED') {
+      const expiresAt = new Date(now.getTime() + voucher.package.durationMinutes * 60 * 1000);
+      const claimed = await prisma.voucher.updateMany({
+        where: { id: voucher.id, status: 'UNUSED' },
+        data: { status: 'ACTIVE', activatedAt: now, expiresAt },
+      });
+      if (claimed.count !== 1) {
+        const latest = await prisma.voucher.findUnique({ where: { id: voucher.id } });
+        if (!latest) {
+          res.status(401).json({ error: 'Voucher no longer exists' });
+          return;
+        }
+        activeVoucher = latest as typeof voucher;
+      } else {
+        activeVoucher = { ...voucher, status: 'ACTIVE', activatedAt: now, expiresAt } as typeof voucher;
+      }
+    }
+
+    if (
+      activeVoucher.status !== 'ACTIVE' ||
+      !activeVoucher.expiresAt ||
+      activeVoucher.expiresAt.getTime() <= now.getTime()
+    ) {
+      res.status(401).json({ error: 'Voucher has expired or is no longer usable' });
+      return;
+    }
+
+    const activeSession = await prisma.radiusSession.findFirst({
+      where: {
+        voucherId: voucher.id,
+        status: { in: ['START', 'INTERIM_UPDATE'] },
+      },
+      select: { id: true, callingStationId: true },
+    });
+    if (activeSession) {
+      res.status(401).json({ error: 'This voucher already has an active Wi-Fi session' });
+      return;
+    }
+
+    const remainingSeconds = Math.max(1, Math.ceil((activeVoucher.expiresAt.getTime() - now.getTime()) / 1000));
+    const filterId = 'POAFI_' + voucher.package.id.replace(/-/g, '').slice(0, 16).toUpperCase();
+
+    // FreeRADIUS PAP validates User-Password against this control attribute.
+    // Session-Timeout is a standard RADIUS attribute; Filter-Id can map to a
+    // locally configured policy on NAS products that support it.
+    res.json({
+      'control:Cleartext-Password': { value: [username], do_xlat: false },
+      'reply:Session-Timeout': { value: [remainingSeconds], do_xlat: false },
+      // WISPr rates are expressed in bits per second, while PoaFi stores Kbps.
+      'reply:WISPr-Bandwidth-Max-Up': { value: [voucher.package.uploadKbps * 1000], do_xlat: false },
+      'reply:WISPr-Bandwidth-Max-Down': { value: [voucher.package.downloadKbps * 1000], do_xlat: false },
+      'reply:Filter-Id': { value: [filterId], do_xlat: false },
+      'reply:Reply-Message': { value: ['PoaFi voucher accepted'], do_xlat: false },
+    });
+  } catch (error) {
+    console.error('RADIUS voucher authorization failed:', error);
+    res.status(500).json({ error: 'RADIUS authorization service failed' });
+  }
+});
+
+router.post('/accounting', radiusRestAuthorized, async (req, res) => {
+  try {
+    const sourceIp = radiusValue(req.body, 'Packet-Src-IP-Address');
+    // Trust the source address verified by FreeRADIUS dynamic-client lookup.
+    // NAS-IP-Address is supplied by the device itself and is not an identity proof.
+    const nasIp = sourceIp;
+    const acctSessionId = radiusValue(req.body, 'Acct-Session-Id');
+    const username = radiusValue(req.body, 'User-Name')?.trim().toUpperCase();
+    const statusType = (radiusValue(req.body, 'Acct-Status-Type') || '').toLowerCase();
+
+    if (!nasIp || isIP(nasIp) !== 4 || !acctSessionId || !username) {
+      res.status(400).json({ error: 'RADIUS accounting request is missing NAS, session, or user identity' });
+      return;
+    }
+
+    const nas = await prisma.radiusNas.findUnique({ where: { nasname: nasIp } });
+    if (!nas || !nas.isActive) {
+      res.status(404).json({ error: 'Unknown RADIUS NAS' });
+      return;
+    }
+
+    const codeHash = /^[A-F0-9]{8}$/.test(username)
+      ? crypto.createHash('sha256').update(username).digest('hex')
+      : '';
+    const voucher = codeHash
+      ? await prisma.voucher.findFirst({ where: { codeHash, tenantId: nas.tenantId }, select: { id: true } })
+      : null;
+
+    const now = new Date();
+    const common = {
+      username,
+      ...(voucher ? { voucherId: voucher.id } : {}),
+      framedIpAddress: radiusValue(req.body, 'Framed-IP-Address') || null,
+      callingStationId: radiusValue(req.body, 'Calling-Station-Id') || null,
+      calledStationId: radiusValue(req.body, 'Called-Station-Id') || null,
+      inputOctets: octets(radiusValue(req.body, 'Acct-Input-Octets'), radiusValue(req.body, 'Acct-Input-Gigawords')),
+      outputOctets: octets(radiusValue(req.body, 'Acct-Output-Octets'), radiusValue(req.body, 'Acct-Output-Gigawords')),
+      sessionTimeSeconds: Number(radiusValue(req.body, 'Acct-Session-Time') || 0),
+      lastUpdatedAt: now,
+    };
+
+    if (statusType === 'start') {
+      await prisma.radiusSession.upsert({
+        where: { nasId_acctSessionId: { nasId: nas.id, acctSessionId } },
+        create: {
+          nasId: nas.id,
+          acctSessionId,
+          status: 'START',
+          startedAt: now,
+          ...common,
+        },
+        update: {
+          status: 'START',
+          startedAt: now,
+          stoppedAt: null,
+          ...common,
+        },
+      });
+    } else if (statusType === 'interim-update' || statusType === 'interim_update') {
+      await prisma.radiusSession.upsert({
+        where: { nasId_acctSessionId: { nasId: nas.id, acctSessionId } },
+        create: {
+          nasId: nas.id,
+          acctSessionId,
+          status: 'INTERIM_UPDATE',
+          startedAt: now,
+          ...common,
+        },
+        update: { status: 'INTERIM_UPDATE', ...common },
+      });
+    } else if (statusType === 'stop') {
+      await prisma.radiusSession.upsert({
+        where: { nasId_acctSessionId: { nasId: nas.id, acctSessionId } },
+        create: {
+          nasId: nas.id,
+          acctSessionId,
+          status: 'STOP',
+          startedAt: now,
+          stoppedAt: now,
+          ...common,
+        },
+        update: { status: 'STOP', stoppedAt: now, ...common },
+      });
+    } else {
+      // Accounting-On/Off and vendor-specific status values are acknowledged
+      // but do not create subscriber-session records.
+    }
+
+    res.status(204).end();
+  } catch (error) {
+    console.error('RADIUS accounting update failed:', error);
+    res.status(500).json({ error: 'RADIUS accounting service failed' });
+  }
+});
+
+// Dashboard and NAS-management endpoints require an authenticated PoaFi user.
+router.use(requireAuth);
+
+router.get('/status', (_req, res) => {
+  res.json({
+    enabled: env.RADIUS_ENABLED && Boolean(env.RADIUS_REST_SHARED_SECRET),
+    serverHost: env.RADIUS_SERVER_HOST || null,
+    authenticationPort: 1812,
+    accountingPort: 1813,
+    authenticationProtocol: 'PAP',
+    accounting: true,
+  });
+});
+
+router.get('/clients', async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const where = user?.role === 'PLATFORM_ADMIN'
+      ? (req.query.tenantId ? { tenantId: String(req.query.tenantId) } : {})
+      : { tenantId: user?.tenantId || '' };
+
+    const clients = await prisma.radiusNas.findMany({
+      where,
+      include: { tenant: { select: { name: true, slug: true } }, router: { select: { id: true, name: true } } },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.json({
+      clients: clients.map(({ encryptedSecret: _secret, ...client }) => client),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load RADIUS clients' });
+  }
+});
+
+router.post('/clients', async (req, res) => {
+  try {
+    const parsed = createClientSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid RADIUS client details', details: parsed.error.issues });
+      return;
+    }
+
+    const user = (req as any).user;
+    const tenantId = getTenantId(req, parsed.data.tenantId);
+    if (!tenantId) {
+      res.status(400).json({ error: 'Select an Operator before adding a network device' });
+      return;
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant || !tenant.isActive) {
+      res.status(404).json({ error: 'Operator not found or inactive' });
+      return;
+    }
+
+    if (parsed.data.routerId) {
+      const linkedRouter = await prisma.router.findFirst({
+        where: { id: parsed.data.routerId, tenantId },
+        select: { id: true },
+      });
+      if (!linkedRouter) {
+        res.status(400).json({ error: 'Selected router does not belong to this Operator' });
+        return;
+      }
+    }
+
+    const oneTimeSecret = crypto.randomBytes(32).toString('base64url');
+    const id = crypto.randomUUID();
+    const shortname = parsed.data.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 20) || 'poafi-nas';
+
+    const client = await prisma.radiusNas.create({
+      data: {
+        id,
+        tenantId,
+        routerId: parsed.data.routerId || null,
+        vendor: parsed.data.vendor,
+        model: parsed.data.model || null,
+        name: parsed.data.name,
+        nasname: parsed.data.nasname,
+        shortname: shortname + '-' + id.slice(0, 8),
+        type: 'other',
+        encryptedSecret: encryptSecret(oneTimeSecret),
+        description: parsed.data.description || null,
+      },
+    });
+
+    const { encryptedSecret: _secret, ...safeClient } = client;
+    res.status(201).json({
+      message: 'RADIUS client added. Copy the shared secret now; it will not be shown again.',
+      client: safeClient,
+      sharedSecret: oneTimeSecret,
+      configuration: {
+        authenticationServer: env.RADIUS_SERVER_HOST || 'YOUR_PUBLIC_RADIUS_HOST',
+        authenticationPort: 1812,
+        accountingServer: env.RADIUS_SERVER_HOST || 'YOUR_PUBLIC_RADIUS_HOST',
+        accountingPort: 1813,
+        authenticationProtocol: 'PAP',
+      },
+    });
+  } catch (error: any) {
+    if (error?.code === 'P2002') {
+      res.status(409).json({ error: 'That source IP is already registered as a RADIUS client. Edit the existing entry or use a different address.' });
+      return;
+    }
+    console.error('Failed to register RADIUS client:', error);
+    res.status(500).json({ error: 'Failed to register RADIUS client' });
+  }
+});
+
+router.patch('/clients/:id', async (req, res) => {
+  try {
+    const parsed = updateClientSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid RADIUS client update', details: parsed.error.issues });
+      return;
+    }
+
+    const user = (req as any).user;
+    const existing = await prisma.radiusNas.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      res.status(404).json({ error: 'RADIUS client not found' });
+      return;
+    }
+    if (user?.role !== 'PLATFORM_ADMIN' && existing.tenantId !== user?.tenantId) {
+      res.status(403).json({ error: 'You do not own this RADIUS client' });
+      return;
+    }
+
+    if (parsed.data.routerId) {
+      const linkedRouter = await prisma.router.findFirst({
+        where: { id: parsed.data.routerId, tenantId: existing.tenantId },
+        select: { id: true },
+      });
+      if (!linkedRouter) {
+        res.status(400).json({ error: 'Selected router does not belong to this Operator' });
+        return;
+      }
+    }
+
+    const updated = await prisma.radiusNas.update({
+      where: { id: existing.id },
+      data: parsed.data,
+    });
+    const { encryptedSecret: _secret, ...safeClient } = updated;
+    res.json({ message: 'RADIUS client updated', client: safeClient });
+  } catch (error: any) {
+    if (error?.code === 'P2002') {
+      res.status(409).json({ error: 'That source IP is already registered' });
+      return;
+    }
+    res.status(500).json({ error: 'Failed to update RADIUS client' });
+  }
+});
+
+router.post('/clients/:id/rotate-secret', async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const existing = await prisma.radiusNas.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      res.status(404).json({ error: 'RADIUS client not found' });
+      return;
+    }
+    if (user?.role !== 'PLATFORM_ADMIN' && existing.tenantId !== user?.tenantId) {
+      res.status(403).json({ error: 'You do not own this RADIUS client' });
+      return;
+    }
+
+    const oneTimeSecret = crypto.randomBytes(32).toString('base64url');
+    const updated = await prisma.radiusNas.update({
+      where: { id: existing.id },
+      data: { encryptedSecret: encryptSecret(oneTimeSecret), isActive: true },
+    });
+    const { encryptedSecret: _secret, ...safeClient } = updated;
+    res.json({
+      message: 'RADIUS shared secret rotated. Update the secret on the physical device now.',
+      client: safeClient,
+      sharedSecret: oneTimeSecret,
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to rotate RADIUS secret' });
+  }
+});
+
+router.delete('/clients/:id', async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const existing = await prisma.radiusNas.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      res.status(404).json({ error: 'RADIUS client not found' });
+      return;
+    }
+    if (user?.role !== 'PLATFORM_ADMIN' && existing.tenantId !== user?.tenantId) {
+      res.status(403).json({ error: 'You do not own this RADIUS client' });
+      return;
+    }
+    await prisma.radiusNas.delete({ where: { id: existing.id } });
+    res.json({ message: 'RADIUS client deleted' });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to delete RADIUS client' });
+  }
+});
+
+router.get('/sessions', async (req, res) => {
+  try {
+    const user = (req as any).user;
+    const where = user?.role === 'PLATFORM_ADMIN'
+      ? (req.query.tenantId ? { nas: { tenantId: String(req.query.tenantId) } } : {})
+      : { nas: { tenantId: user?.tenantId || '' } };
+
+    const sessions = await prisma.radiusSession.findMany({
+      where,
+      include: { nas: { select: { name: true, nasname: true } } },
+      orderBy: { lastUpdatedAt: 'desc' },
+      take: 100,
+    });
+
+    res.json({
+      sessions: sessions.map((session) => ({
+        ...session,
+        inputOctets: session.inputOctets.toString(),
+        outputOctets: session.outputOctets.toString(),
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to load RADIUS sessions' });
+  }
+});
+
+export default router;

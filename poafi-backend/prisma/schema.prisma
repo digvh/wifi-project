@@ -18,6 +18,7 @@ model Tenant {
   vouchers      Voucher[]
   payments      Payment[]
   paymentConfig PaymentConfig?
+  radiusNas     RadiusNas[]
 }
 
 model User {
@@ -49,6 +50,7 @@ model Router {
   tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   packages     Package[]
   deviceModel  NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
+  radiusNas    RadiusNas[]
 
   @@index([tenantId])
   @@index([deviceModelId])
@@ -106,24 +108,25 @@ model Package {
 }
 
 model Voucher {
-  id            String    @id @default(uuid())
-  batchId       String
-  tenantId      String
-  packageId     String
-  codeHash      String    @unique
-  encryptedCode String
-  status        String    @default("UNUSED")
-  activatedAt   DateTime?
-  expiresAt     DateTime?
-  usedByIp      String?
-  prefix        String?
-  isImported    Boolean   @default(false)
-  issuedAt      DateTime?
-  createdAt     DateTime  @default(now())
+  id              String    @id @default(uuid())
+  batchId         String
+  tenantId        String
+  packageId       String
+  codeHash        String    @unique
+  encryptedCode   String
+  status          String    @default("UNUSED")
+  activatedAt     DateTime?
+  expiresAt       DateTime?
+  usedByIp        String?
+  prefix          String?
+  isImported      Boolean   @default(false)
+  issuedAt        DateTime?
+  createdAt       DateTime  @default(now())
 
-  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  package  Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  payment  Payment?
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  package        Package         @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  payment        Payment?
+  radiusSessions RadiusSession[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -156,6 +159,59 @@ model Payment {
   @@index([status])
   @@index([reference])
   @@index([phoneNumber])
+}
+
+/// RADIUS network access servers (NAS). Maps to the standard FreeRADIUS `nas` table.
+model RadiusNas {
+  id              String   @id @default(uuid())
+  tenantId        String
+  routerId        String?
+  vendor          String   @default("GENERIC")
+  model           String?
+  name            String
+  nasname         String   @unique @db.VarChar(128)
+  shortname       String   @db.VarChar(32)
+  type            String   @default("other") @db.VarChar(30)
+  encryptedSecret String   @db.Text
+  description     String?  @db.VarChar(200)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  router   Router?         @relation(fields: [routerId], references: [id], onDelete: SetNull)
+  sessions RadiusSession[]
+
+  @@index([tenantId])
+  @@index([routerId])
+  @@map("radius_nas")
+}
+
+/// RADIUS accounting snapshots received from NAS.
+model RadiusSession {
+  id                 String    @id @default(uuid())
+  nasId              String
+  voucherId          String?
+  acctSessionId      String
+  username           String
+  status             String    @default("START")
+  framedIpAddress    String?
+  callingStationId   String?
+  calledStationId    String?
+  inputOctets        BigInt    @default(0)
+  outputOctets       BigInt    @default(0)
+  sessionTimeSeconds Int       @default(0)
+  startedAt          DateTime?
+  lastUpdatedAt      DateTime  @updatedAt
+  stoppedAt          DateTime?
+
+  nas     RadiusNas @relation(fields: [nasId], references: [id], onDelete: Cascade)
+  voucher Voucher?  @relation(fields: [voucherId], references: [id], onDelete: SetNull)
+
+  @@unique([nasId, acctSessionId])
+  @@index([voucherId])
+  @@index([username])
+  @@index([status, lastUpdatedAt])
+  @@map("radius_sessions")
 }
 
 model PaymentConfig {
