@@ -8,6 +8,8 @@ export default function VouchersPage() {
   const [packages, setPackages] = useState<any[]>([]);
   const [selectedPackage, setSelectedPackage] = useState("");
   const [quantity, setQuantity] = useState("10");
+  const [codeLength, setCodeLength] = useState("8");
+  const [codeFormat, setCodeFormat] = useState<"ALPHANUMERIC" | "NUMBERS">("ALPHANUMERIC");
   const [generatedBatch, setGeneratedBatch] = useState<any>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -44,7 +46,7 @@ export default function VouchersPage() {
     try {
       const res = await apiFetch("/vouchers/generate", {
         method: "POST",
-        body: JSON.stringify({ packageId: selectedPackage, quantity }),
+        body: JSON.stringify({ packageId: selectedPackage, quantity, codeLength: Number(codeLength), codeFormat }),
       });
       setGeneratedBatch(res);
       setSuccess(`Successfully generated ${res.count} vouchers!`);
@@ -137,6 +139,22 @@ export default function VouchersPage() {
                 max="500"
               />
               <p className="text-[10px] text-gray-400 mt-1">Maximum 500 vouchers per batch.</p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Code Length</label>
+                <select value={codeLength} onChange={(e) => setCodeLength(e.target.value)} className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white text-sm">
+                  {[6, 7, 8, 9, 10, 12, 16].map((n) => <option key={n} value={n}>{n} characters</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1">Code Format</label>
+                <select value={codeFormat} onChange={(e) => setCodeFormat(e.target.value as "ALPHANUMERIC" | "NUMBERS")} className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white text-sm">
+                  <option value="ALPHANUMERIC">Letters + numbers</option>
+                  <option value="NUMBERS">Numbers only</option>
+                </select>
+              </div>
             </div>
 
             <button

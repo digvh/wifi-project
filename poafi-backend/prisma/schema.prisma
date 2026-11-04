@@ -15,6 +15,7 @@ model Tenant {
   users         User[]
   routers       Router[]
   packages      Package[]
+  deviceSetupRequests DeviceSetupRequest[]
   vouchers      Voucher[]
   payments      Payment[]
   paymentConfig PaymentConfig?
@@ -42,6 +43,7 @@ model Router {
   
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   packages          Package[]
+  setupRequests     DeviceSetupRequest[]
   deviceModel       NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
   deviceModelId     String?
   siteName          String?
@@ -78,6 +80,7 @@ model NetworkDeviceModel {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   routers            Router[]
+  deviceSetupRequests DeviceSetupRequest[]
 
   @@unique([brand, model])
   @@index([category])
@@ -180,4 +183,37 @@ model OperatorApplication {
   createdAt    DateTime  @default(now())
   reviewedAt   DateTime?
   reviewNote   String?
+}
+
+
+model DeviceSetupRequest {
+  id                   String   @id @default(uuid())
+  tenantId             String
+  routerId             String?
+  deviceModelId        String?
+  setupMode            String   // SELF_SERVICE or ADMIN_ASSISTANCE
+  supportMethod        String?  // REMOTE or PHYSICAL_HANDOVER, only for admin assistance
+  status               String   @default("SUBMITTED")
+  vendor               String
+  modelName            String?
+  deviceCategory       String
+  serialNumber         String?
+  siteName             String?
+  siteAddress          String?
+  requestedCapabilities String[] @default([])
+  operatorNotes        String?
+  adminNotes           String?
+  reviewedAt           DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  router      Router?            @relation(fields: [routerId], references: [id], onDelete: SetNull)
+  deviceModel NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, status])
+  @@index([setupMode, status])
+  @@index([routerId])
+  @@index([deviceModelId])
 }

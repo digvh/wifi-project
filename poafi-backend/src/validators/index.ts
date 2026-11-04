@@ -77,6 +77,8 @@ export const updatePackageSchema = z.object({
 export const generateVouchersSchema = z.object({
   packageId: z.string().uuid('Invalid package ID'),
   quantity: z.coerce.number().int().min(1, 'Must generate at least 1').max(500, 'Maximum 500 vouchers per batch'),
+  codeLength: z.coerce.number().int().min(6).max(16).default(8),
+  codeFormat: z.enum(['ALPHANUMERIC', 'NUMBERS']).default('ALPHANUMERIC'),
 });
 
 // Portal
