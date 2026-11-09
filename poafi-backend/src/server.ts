@@ -13,6 +13,7 @@ import statsRoutes from './routes/stats';
 import applicationRoutes from './routes/applications';
 import deviceCatalogRoutes from './routes/deviceCatalog';
 import radiusRoutes from './routes/radius';
+import deviceSetupRoutes from './routes/deviceSetup';
 import { VoucherCleanupService } from './services/cron/VoucherCleanupService';
 
 const app = express();
@@ -29,6 +30,7 @@ app.use('/api/tenants', tenantRoutes);
 app.use('/api/routers', routerRoutes);
 app.use('/api/radius', radiusRoutes);
 app.use('/api/device-catalog', deviceCatalogRoutes);
+app.use('/api/device-setup', deviceSetupRoutes);
 app.use('/api/packages', packageRoutes);
 app.use('/api/vouchers', voucherRoutes);
 app.use('/api/portal', portalRoutes);
@@ -42,6 +44,5 @@ app.get('/api/health', (req, res) => {
 
 app.listen(env.PORT, () => {
   console.log(`🚀 PoaFi API running on http://localhost:${env.PORT}`);
-  // Start the background cron engine for automatic voucher expiry & router session cleanup
   VoucherCleanupService.startBackgroundJob(60000);
 });

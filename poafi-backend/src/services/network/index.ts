@@ -7,3 +7,4 @@ export * from './adapters/CudyAdapter';
 export * from './adapters/ComfastAdapter';
 export * from './adapters/WavlinkAdapter';
 
+export * from './integrationRegistry';

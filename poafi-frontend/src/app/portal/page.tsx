@@ -84,7 +84,7 @@ function PortalContent() {
   const [lang, setLang] = useState<"sw" | "en">("sw");
   const [activeTab, setActiveTab] = useState<"buy" | "voucher">("buy");
   const [packages, setPackages] = useState<any[]>([]);
-  const [operatorName, setOperatorName] = useState(tenantSlug);
+  const [operatorName, setOperatorName] = useState("");
   const [loadingPackages, setLoadingPackages] = useState(true);
 
   // Buy flow state
@@ -261,11 +261,11 @@ function PortalContent() {
           <div className="w-16 h-16 bg-[#00f3ff]/20 rounded-2xl flex items-center justify-center mx-auto border border-[#00f3ff]/30 shadow-[0_0_30px_rgba(0,243,255,0.2)]">
             <Wifi className="w-8 h-8 text-[#00f3ff]" />
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight">
-            PoaFi <span className="text-[#00f3ff]">Hotspot</span>
+          <h1 className="text-3xl font-extrabold tracking-tight break-words">
+            {operatorName || (loadingPackages ? "Loading Wi-Fi…" : "Wi-Fi Network")}
           </h1>
           <p className="text-xs text-gray-400">
-            {t.welcome} <span className="text-white font-semibold">{operatorName}</span> {t.speed}
+            {t.welcome} <span className="text-white font-semibold">{operatorName || "Wi-Fi Network"}</span> {t.speed}
           </p>
         </div>
 

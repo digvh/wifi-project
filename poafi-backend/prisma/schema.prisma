@@ -19,6 +19,7 @@ model Tenant {
   payments      Payment[]
   paymentConfig PaymentConfig?
   radiusNas     RadiusNas[]
+  deviceSetupRequests DeviceSetupRequest[]
 }
 
 model User {
@@ -28,6 +29,7 @@ model User {
   passwordHash String
   role         String   @default("TENANT_OWNER")
   tenant       Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedSetupRequests DeviceSetupRequest[] @relation("AssignedSetupRequests")
 }
 
 model Router {
@@ -51,6 +53,7 @@ model Router {
   packages     Package[]
   deviceModel  NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
   radiusNas    RadiusNas[]
+  deviceSetupRequests DeviceSetupRequest[]
 
   @@index([tenantId])
   @@index([deviceModelId])
@@ -79,11 +82,36 @@ model NetworkDeviceModel {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
   routers            Router[]
+  deviceSetupRequests DeviceSetupRequest[]
 
   @@unique([brand, model])
   @@index([category])
   @@index([brand])
   @@index([coverageMeters])
+}
+
+model DeviceSetupRequest {
+  id              String   @id @default(uuid())
+  tenantId        String
+  requestType     String   @default("SELF") // SELF or ASSISTED
+  status          String   @default("PENDING") // PENDING, IN_PROGRESS, COMPLETED, CANCELLED
+  deviceName      String?
+  deviceVendor    String?
+  deviceModelId   String?
+  macAddress      String?
+  serialNumber    String?
+  notes           String?
+  adminNotes      String?
+  assignedToId    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  deviceModel     NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
+  assignedTo      User?               @relation("AssignedSetupRequests", fields: [assignedToId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([status])
 }
 
 model Package {
@@ -161,7 +189,6 @@ model Payment {
   @@index([phoneNumber])
 }
 
-/// RADIUS network access servers (NAS). Maps to the standard FreeRADIUS `nas` table.
 model RadiusNas {
   id              String   @id @default(uuid())
   tenantId        String
@@ -186,7 +213,6 @@ model RadiusNas {
   @@map("radius_nas")
 }
 
-/// RADIUS accounting snapshots received from NAS.
 model RadiusSession {
   id                 String    @id @default(uuid())
   nasId              String

@@ -6,12 +6,6 @@ export class VoucherCleanupService {
   private static isRunning = false;
   private static hasRunBootRecovery = false;
 
-  /**
-   * Boot-time recovery: release vouchers stuck in REDEEMING state from a
-   * previous server crash. Called once at startup. Any voucher legitimately
-   * mid-provision at the moment of boot cannot exist (no live requests),
-   * so all REDEEMING vouchers at boot are orphans from prior crashes.
-   */
   static async recoverOrphanedVouchers(): Promise<{ releasedCount: number }> {
     if (this.hasRunBootRecovery) return { releasedCount: 0 };
     this.hasRunBootRecovery = true;
@@ -33,15 +27,6 @@ export class VoucherCleanupService {
     }
   }
 
-  /**
-   * Periodic scan: expire ACTIVE vouchers past their expiry timestamp and
-   * remove their router-side hotspot users.
-   *
-   * RADIUS-managed tenants are skipped because:
-   *  - Their vouchers were activated via RADIUS Access-Accept
-   *  - The NAS tears down the session when Session-Timeout expires
-   *  - PoaFi only needs to reflect the new status in its own database
-   */
   static async cleanupExpiredVouchers(): Promise<{ expiredCount: number }> {
     if (this.isRunning) return { expiredCount: 0 };
     this.isRunning = true;
@@ -74,7 +59,6 @@ export class VoucherCleanupService {
       }
 
       for (const [tenantId, tenantVouchers] of vouchersByTenant.entries()) {
-        // Skip router-side cleanup for RADIUS-managed tenants — NAS handles it.
         const radiusNas = await prisma.radiusNas.findFirst({
           where: { tenantId, isActive: true },
           select: { id: true },
@@ -87,7 +71,6 @@ export class VoucherCleanupService {
           continue;
         }
 
-        // Native-router tenant: disconnect and remove user on the router.
         try {
           const routerDevice = await prisma.router.findFirst({
             where: { tenantId, status: 'ONLINE' },
@@ -143,24 +126,17 @@ export class VoucherCleanupService {
     }
   }
 
-  /**
-   * Start the recurring background job (default 60 seconds). Also runs a
-   * one-time boot recovery to release any orphaned REDEEMING vouchers.
-   */
   static startBackgroundJob(intervalMs = 60000): NodeJS.Timeout {
     console.log(
       '⏱️ Voucher Auto-Expiry & Router Cleanup Service started (60s interval)'
     );
 
-    // Boot recovery: release orphans from prior crash
     this.recoverOrphanedVouchers().catch((err) =>
       console.error('[VoucherCleanup] Boot recovery error:', err)
     );
 
-    // Initial expiry pass on boot
     this.cleanupExpiredVouchers();
 
-    // Periodic runs
     return setInterval(() => {
       this.cleanupExpiredVouchers();
     }, intervalMs);

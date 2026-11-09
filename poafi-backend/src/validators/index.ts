@@ -26,26 +26,36 @@ export const createTenantLoginSchema = z.object({
 // Routers
 export const createRouterSchema = z.object({
   tenantId: z.string().uuid('Invalid tenant ID').optional(),
+  deviceModelId: z.string().uuid('Invalid device model ID').optional().nullable(),
+  siteName: z.string().max(120).optional().nullable(),
+  installationAddress: z.string().max(500).optional().nullable(),
+  connectionMode: z.enum(['DIRECT', 'VPN', 'SECURE_TUNNEL', 'CLOUD_CONTROLLER']).default('DIRECT'),
+  installationNotes: z.string().max(2000).optional().nullable(),
   name: z.string().min(1, 'Router name is required').max(100),
   host: z.string().min(1, 'Host is required'),
   apiPort: z.coerce.number().int().min(1).max(65535).default(8728),
   username: z.string().min(1, 'Username is required'),
   password: z.string().min(1, 'Password is required'),
-  vendor: z.enum(['MIKROTIK', 'TPLINK_OMADA', 'RUIJIE', 'CUDY', 'COMFAST', 'WAVLINK']).default('MIKROTIK'),
+  vendor: z.string().trim().min(2).max(50).regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/).transform((value) => value.toUpperCase().replace(/[\s-]+/g, '_')).default('MIKROTIK'),
 });
 
 export const updateRouterSchema = z.object({
+  deviceModelId: z.string().uuid('Invalid device model ID').optional().nullable(),
+  siteName: z.string().max(120).optional().nullable(),
+  installationAddress: z.string().max(500).optional().nullable(),
+  connectionMode: z.enum(['DIRECT', 'VPN', 'SECURE_TUNNEL', 'CLOUD_CONTROLLER']).optional(),
+  installationNotes: z.string().max(2000).optional().nullable(),
   name: z.string().min(1).max(100).optional(),
   host: z.string().min(1).optional(),
   apiPort: z.coerce.number().int().min(1).max(65535).optional(),
   username: z.string().min(1).optional(),
   password: z.string().min(1).optional(),
-  vendor: z.enum(['MIKROTIK', 'TPLINK_OMADA', 'RUIJIE', 'CUDY', 'COMFAST', 'WAVLINK']).optional(),
-  status: z.string().optional(),
+  vendor: z.string().trim().min(2).max(50).regex(/^[A-Za-z0-9][A-Za-z0-9 _-]*$/).transform((value) => value.toUpperCase().replace(/[\s-]+/g, '_')).optional(),
 });
 
 // Packages
 export const createPackageSchema = z.object({
+  tenantId: z.string().uuid().optional(),
   name: z.string().min(1, 'Package name is required').max(100),
   priceTzs: z.coerce.number().int().min(0, 'Price must be positive'),
   durationMinutes: z.coerce.number().int().min(1, 'Duration must be at least 1 minute'),
@@ -67,6 +77,8 @@ export const updatePackageSchema = z.object({
 export const generateVouchersSchema = z.object({
   packageId: z.string().uuid('Invalid package ID'),
   quantity: z.coerce.number().int().min(1, 'Must generate at least 1').max(500, 'Maximum 500 vouchers per batch'),
+  codeLength: z.coerce.number().int().min(6).max(16).default(8),
+  codeFormat: z.enum(['ALPHANUMERIC', 'NUMBERS']).default('ALPHANUMERIC'),
 });
 
 // Portal

@@ -64,7 +64,7 @@ router.get('/', async (req, res) => {
 // Generate a batch of vouchers
 router.post('/generate', validate(generateVouchersSchema), async (req, res) => {
   try {
-    const { packageId, quantity } = req.body;
+    const { packageId, quantity, codeLength = 8, codeFormat = 'ALPHANUMERIC' } = req.body;
     const tenantId = req.user?.tenantId;
 
     if (!tenantId) {
@@ -84,8 +84,18 @@ router.post('/generate', validate(generateVouchersSchema), async (req, res) => {
 
     const count = parseInt(quantity);
     for (let i = 0; i < count; i++) {
-      // 8-character uppercase hex code
-      const rawCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+      // Generate unique, cryptographically random printable voucher codes.
+      const alphabet = codeFormat === 'NUMBERS' ? '0123456789' : 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let rawCode = '';
+      while (rawCode.length < codeLength) {
+        const bytes = crypto.randomBytes(codeLength);
+        for (const byte of bytes) {
+          // Rejection sampling avoids modulo bias.
+          const limit = 256 - (256 % alphabet.length);
+          if (byte < limit) rawCode += alphabet[byte % alphabet.length];
+          if (rawCode.length === codeLength) break;
+        }
+      }
       const codeHash = crypto.createHash('sha256').update(rawCode).digest('hex');
       const encryptedCode = encryptSecret(rawCode);
 
@@ -112,6 +122,8 @@ router.post('/generate', validate(generateVouchersSchema), async (req, res) => {
       count: generatedCodes.length,
       packageName: pkg.name,
       price: pkg.priceTzs,
+      codeLength,
+      codeFormat,
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to generate vouchers' });

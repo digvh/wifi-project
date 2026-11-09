@@ -128,7 +128,6 @@ router.get('/', async (req, res) => {
   }
 });
 
-// Catalogue write access is restricted to the platform administrator.
 router.post('/', requirePlatformAdmin, async (req, res) => {
   const validation = validateDeviceInput(req.body);
   if (validation.error || !validation.data) {

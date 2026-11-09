@@ -16,33 +16,22 @@ export class WavlinkAdapter implements IRouterAdapter {
   constructor(private readonly config: RouterConnectionConfig) {}
 
   async testConnection(): Promise<RouterTestResult> {
-    try {
-      return {
-        connected: true,
-        vendor: 'WAVLINK',
-        identity: `Wavlink Device (${this.config.host})`,
-        version: 'Wavlink WebOS',
-        model: 'Wavlink Aerial High Power Outdoor AP',
-      };
-    } catch (error: any) {
-      throw new Error(`Wavlink connection failed: ${error.message}`);
-    }
+    throw new Error('Wavlink live API connection is not implemented. This device has NOT been verified as connected.');
   }
 
-  async provisionUser(options: ProvisionUserOptions): Promise<boolean> {
-    return true;
+  async provisionUser(_options: ProvisionUserOptions): Promise<boolean> {
+    throw new Error('Wavlink hotspot voucher provisioning is not implemented yet.');
   }
 
-  async removeUser(username: string): Promise<boolean> {
-    return true;
+  async removeUser(_username: string): Promise<boolean> {
+    throw new Error('Wavlink hotspot user removal is not implemented yet.');
   }
 
   async listActiveSessions(): Promise<ActiveSession[]> {
-    return [];
+    throw new Error('Wavlink active-session retrieval is not implemented yet.');
   }
 
-  async disconnectSession(usernameOrId: string): Promise<boolean> {
-    return true;
-  }
-}
+  async disconnectSession(_usernameOrId: string): Promise<boolean> {
+    throw new Error('Wavlink session disconnection is not implemented yet.');
+  }}
 
