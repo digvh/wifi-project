@@ -26,10 +26,14 @@ router.post('/provisioning/enroll', async (req, res) => {
       where: { tokenHash, expiresAt: { gt: new Date() }, status: 'SCRIPT_ISSUED' },
     });
     if (!enrollment) { res.status(404).json({ error: 'Enrollment token is invalid, expired, or already used' }); return; }
-    await prisma.routerProvisioningEnrollment.update({
-      where: { id: enrollment.id },
+    const claimed = await prisma.routerProvisioningEnrollment.updateMany({
+      where: { id: enrollment.id, status: 'SCRIPT_ISSUED', expiresAt: { gt: new Date() } },
       data: { routerPublicKey: parsed.data.publicKey, status: 'WAITING_FOR_SERVER_PEER' },
     });
+    if (claimed.count !== 1) {
+      res.status(409).json({ error: 'Enrollment token was already used' });
+      return;
+    }
     res.json({ received: true, status: 'WAITING_FOR_SERVER_PEER' });
   } catch {
     res.status(500).json({ error: 'Could not register router WireGuard public key' });
@@ -372,17 +376,30 @@ router.post('/:id/provisioning-script', async (req, res) => {
     }
 
     // Allocate an unused address from the dedicated 10.250.0.0/16 management subnet.
-    const existing = await prisma.routerProvisioningEnrollment.findMany({ select: { assignedAddress: true } });
-    const used = new Set(existing.map((item) => item.assignedAddress.split('/')[0]));
-    let hostNumber = 2;
-    while (hostNumber < 65535 && used.has('10.250.' + Math.floor(hostNumber / 256) + '.' + (hostNumber % 256))) hostNumber++;
-    if (hostNumber >= 65535) { res.status(503).json({ error: 'No free WireGuard router addresses remain' }); return; }
-    const assignedAddress = '10.250.' + Math.floor(hostNumber / 256) + '.' + (hostNumber % 256) + '/32';
+    // Reuse this router's reserved address when regenerating a script; only rotate its one-time token.
+    const previousEnrollment = await prisma.routerProvisioningEnrollment.findFirst({
+      where: { routerId: routerDevice.id }, orderBy: { createdAt: 'desc' },
+    });
+    let assignedAddress = previousEnrollment?.assignedAddress;
+    if (!assignedAddress) {
+      const existing = await prisma.routerProvisioningEnrollment.findMany({ select: { assignedAddress: true } });
+      const used = new Set(existing.map((item) => item.assignedAddress.split('/')[0]));
+      let hostNumber = 2;
+      while (hostNumber < 65535 && used.has('10.250.' + Math.floor(hostNumber / 256) + '.' + (hostNumber % 256))) hostNumber++;
+      if (hostNumber >= 65535) { res.status(503).json({ error: 'No free WireGuard router addresses remain' }); return; }
+      assignedAddress = '10.250.' + Math.floor(hostNumber / 256) + '.' + (hostNumber % 256) + '/32';
+    }
     const token = crypto.randomBytes(32).toString('base64url');
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const enrollment = await prisma.routerProvisioningEnrollment.create({
-      data: { routerId: routerDevice.id, tokenHash, assignedAddress, expiresAt: new Date(Date.now() + 30 * 60 * 1000) },
-    });
+    const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+    const enrollment = previousEnrollment
+      ? await prisma.routerProvisioningEnrollment.update({
+          where: { id: previousEnrollment.id },
+          data: { tokenHash, routerPublicKey: null, status: 'SCRIPT_ISSUED', expiresAt },
+        })
+      : await prisma.routerProvisioningEnrollment.create({
+          data: { routerId: routerDevice.id, tokenHash, assignedAddress, expiresAt },
+        });
     const callbackUrl = env.PUBLIC_API_BASE_URL.replace(/\/$/, '') + '/api/routers/provisioning/enroll';
     const wgName = 'poafi-mgmt';
     const script = [
