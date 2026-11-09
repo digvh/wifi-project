@@ -19,6 +19,7 @@ model Tenant {
   vouchers      Voucher[]
   payments      Payment[]
   paymentConfig PaymentConfig?
+  radiusNas     RadiusNas[]
 }
 
 model User {
@@ -43,6 +44,7 @@ model Router {
   
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   packages          Package[]
+  radiusNas         RadiusNas[]
   setupRequests     DeviceSetupRequest[]
   provisioningEnrollments RouterProvisioningEnrollment[]
   deviceModel       NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
@@ -98,6 +100,9 @@ model Package {
   durationMinutes Int
   downloadKbps    Int       @default(3000)
   uploadKbps      Int       @default(1000)
+  dataLimitMb     Int?
+  type            String    @default("TIME")
+  validityDays    Int?
 
   tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   router          Router?   @relation(fields: [routerId], references: [id])
@@ -118,6 +123,10 @@ model Voucher {
   activatedAt   DateTime?
   expiresAt     DateTime?
   usedByIp      String?
+  prefix        String?
+  isImported    Boolean   @default(false)
+  issuedAt      DateTime?
+  radiusSessions RadiusSession[]
   createdAt     DateTime  @default(now())
   
   tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -126,6 +135,7 @@ model Voucher {
 
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([batchId])
 }
 
 model Payment {
@@ -154,6 +164,57 @@ model Payment {
   @@index([status])
   @@index([reference])
   @@index([phoneNumber])
+}
+
+model RadiusNas {
+  id              String   @id @default(uuid())
+  tenantId        String
+  routerId        String?
+  vendor          String   @default("GENERIC")
+  model           String?
+  name            String
+  nasname         String   @unique @db.VarChar(128)
+  shortname       String   @db.VarChar(32)
+  type            String   @default("other") @db.VarChar(30)
+  encryptedSecret String   @db.Text
+  description     String?  @db.VarChar(200)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+
+  tenant   Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  router   Router?         @relation(fields: [routerId], references: [id], onDelete: SetNull)
+  sessions RadiusSession[]
+
+  @@index([tenantId])
+  @@index([routerId])
+  @@map("radius_nas")
+}
+
+model RadiusSession {
+  id                 String    @id @default(uuid())
+  nasId              String
+  voucherId          String?
+  acctSessionId      String
+  username           String
+  status             String    @default("START")
+  framedIpAddress    String?
+  callingStationId   String?
+  calledStationId    String?
+  inputOctets        BigInt    @default(0)
+  outputOctets       BigInt    @default(0)
+  sessionTimeSeconds Int       @default(0)
+  startedAt          DateTime?
+  lastUpdatedAt      DateTime  @updatedAt
+  stoppedAt          DateTime?
+
+  nas     RadiusNas @relation(fields: [nasId], references: [id], onDelete: Cascade)
+  voucher Voucher?  @relation(fields: [voucherId], references: [id], onDelete: SetNull)
+
+  @@unique([nasId, acctSessionId])
+  @@index([voucherId])
+  @@index([username])
+  @@index([status, lastUpdatedAt])
+  @@map("radius_sessions")
 }
 
 model PaymentConfig {
