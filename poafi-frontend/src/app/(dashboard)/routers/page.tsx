@@ -59,6 +59,10 @@ export default function RoutersPage() {
   const [activeSessionsRouterId, setActiveSessionsRouterId] = useState<string | null>(null);
   const [activeSessions, setActiveSessions] = useState<any[]>([]);
   const [loadingSessions, setLoadingSessions] = useState(false);
+  const [provisioningRouterId, setProvisioningRouterId] = useState<string | null>(null);
+  const [provisioningData, setProvisioningData] = useState<any | null>(null);
+  const [provisioningStatus, setProvisioningStatus] = useState<any | null>(null);
+  const [generatingProvisioning, setGeneratingProvisioning] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -184,6 +188,34 @@ export default function RoutersPage() {
     }
   };
 
+
+  const generateProvisioningScript = async (routerId: string) => {
+    setGeneratingProvisioning(true);
+    setProvisioningRouterId(routerId);
+    setProvisioningData(null);
+    setError("");
+    setSuccess("");
+    try {
+      const result = await apiFetch("/routers/" + routerId + "/provisioning-script", { method: "POST" });
+      setProvisioningData(result);
+      setSuccess("A one-time MikroTik setup script was generated. Review it before running it in Winbox.");
+    } catch (err: any) {
+      setError(err.message || "Could not generate the MikroTik setup script");
+    } finally {
+      setGeneratingProvisioning(false);
+    }
+  };
+
+
+  const refreshProvisioningStatus = async (routerId: string) => {
+    try {
+      const result = await apiFetch("/routers/" + routerId + "/provisioning-status");
+      setProvisioningStatus(result.enrollment || null);
+    } catch (err: any) {
+      setError(err.message || "Could not refresh provisioning status");
+    }
+  };
+
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to delete router "${name}"?`)) return;
     try {
@@ -240,6 +272,42 @@ export default function RoutersPage() {
       {success && (
         <div className="text-green-400 bg-green-500/10 border border-green-500/20 p-4 rounded-xl flex items-center gap-3">
           <CheckCircle2 /> {success}
+        </div>
+      )}
+
+
+      {provisioningData && (
+        <div className="glass-panel p-6 space-y-4 border border-cyan-500/20">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-semibold">MikroTik cloud-assisted setup</h2>
+              <p className="text-xs text-gray-400 mt-1">Router address: {provisioningData.assignedAddress} · Token expires: {new Date(provisioningData.expiresAt).toLocaleString()}</p>
+            </div>
+            <button onClick={() => { setProvisioningData(null); setProvisioningStatus(null); setProvisioningRouterId(null); }} className="text-xs text-gray-300 bg-white/10 px-3 py-2 rounded-lg">Close</button>
+          </div>
+          <div className="bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs p-3 rounded-lg">
+            {provisioningData.warning} Test on your isolated VirtualBox MikroTik first. Do not run on a production router until the PoaFi WireGuard hub has been configured and reviewed.
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">1. RouterOS script — run in Winbox Terminal</h3>
+              <button onClick={() => navigator.clipboard.writeText(provisioningData.script)} className="text-xs bg-cyan-500/15 text-cyan-200 px-3 py-2 rounded-lg">Copy script</button>
+            </div>
+            <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-all bg-black/40 border border-white/10 rounded-lg p-3 text-[11px] text-gray-200">{provisioningData.script}</pre>
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold">2. Server peer command — platform administrator only</h3>
+              <div className="flex gap-2">
+                <button onClick={() => provisioningRouterId && refreshProvisioningStatus(provisioningRouterId)} className="text-xs bg-white/10 text-gray-200 px-3 py-2 rounded-lg">Refresh enrollment</button>
+                <button onClick={() => navigator.clipboard.writeText(provisioningStatus?.routerPublicKey ? provisioningData.serverPeerCommand.replace("<ROUTER_PUBLIC_KEY_FROM_ENROLLMENT>", provisioningStatus.routerPublicKey) : provisioningData.serverPeerCommand)} className="text-xs bg-white/10 text-gray-200 px-3 py-2 rounded-lg">Copy command</button>
+              </div>
+            </div>
+            <pre className="whitespace-pre-wrap break-all bg-black/40 border border-white/10 rounded-lg p-3 text-[11px] text-gray-200">{provisioningStatus?.routerPublicKey ? provisioningData.serverPeerCommand.replace("<ROUTER_PUBLIC_KEY_FROM_ENROLLMENT>", provisioningStatus.routerPublicKey) : provisioningData.serverPeerCommand}</pre>
+            <p className="text-xs text-gray-400">Enrollment status: {provisioningStatus?.status || "Not refreshed yet"}</p>
+            {provisioningStatus?.routerPublicKey && <p className="text-xs text-gray-300 break-all">Router public key: {provisioningStatus.routerPublicKey}</p>}
+            <p className="text-xs text-gray-400">Replace the placeholder with the router public key returned by the enrollment callback, then apply this on the WireGuard hub. The UI does not mark the router online merely because a script was generated.</p>
+          </div>
         </div>
       )}
 
@@ -481,6 +549,17 @@ export default function RoutersPage() {
                       }}
                       className="bg-white/10 hover:bg-white/20 text-white text-xs px-3 py-2 rounded-lg"
                     >Edit</button>
+
+                    {r.vendor === "MIKROTIK" && (
+                      <button
+                        onClick={() => generateProvisioningScript(r.id)}
+                        disabled={generatingProvisioning && provisioningRouterId === r.id}
+                        title="Generate a one-time WireGuard bootstrap script"
+                        className="bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-200 text-xs px-3 py-2 rounded-lg border border-cyan-500/20 disabled:opacity-50"
+                      >
+                        {generatingProvisioning && provisioningRouterId === r.id ? "Generating..." : "Cloud setup"}
+                      </button>
+                    )}
                     <button
                       onClick={() => viewSessions(r.id)}
                       disabled={!driverAvailable}
