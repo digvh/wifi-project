@@ -1,4 +1,7 @@
 import { Router } from 'express';
+import crypto from 'crypto';
+import { z } from 'zod';
+import { env } from '../config/env';
 import { prisma } from '../config/database';
 import { requireAuth } from '../middleware/auth';
 import { encryptSecret, decryptSecret } from '../utils/crypto';
@@ -7,6 +10,32 @@ import { validate } from '../middleware/validate';
 import { createRouterSchema, updateRouterSchema } from '../validators';
 
 const router = Router();
+
+const enrollmentCallbackSchema = z.object({
+  token: z.string().min(32).max(128),
+  publicKey: z.string().regex(/^[A-Za-z0-9+/]{43}=$/, 'Invalid WireGuard public key'),
+});
+
+// Public one-time callback: possession of the unguessable token proves this router was issued the script.
+router.post('/provisioning/enroll', async (req, res) => {
+  const parsed = enrollmentCallbackSchema.safeParse(req.body);
+  if (!parsed.success) { res.status(400).json({ error: 'Invalid enrollment payload' }); return; }
+  try {
+    const tokenHash = crypto.createHash('sha256').update(parsed.data.token).digest('hex');
+    const enrollment = await prisma.routerProvisioningEnrollment.findFirst({
+      where: { tokenHash, expiresAt: { gt: new Date() }, status: 'SCRIPT_ISSUED' },
+    });
+    if (!enrollment) { res.status(404).json({ error: 'Enrollment token is invalid, expired, or already used' }); return; }
+    await prisma.routerProvisioningEnrollment.update({
+      where: { id: enrollment.id },
+      data: { routerPublicKey: parsed.data.publicKey, status: 'WAITING_FOR_SERVER_PEER' },
+    });
+    res.json({ received: true, status: 'WAITING_FOR_SERVER_PEER' });
+  } catch {
+    res.status(500).json({ error: 'Could not register router WireGuard public key' });
+  }
+});
+
 router.use(requireAuth);
 
 async function validateLinkedDeviceModel(deviceModelId: string, vendor: string): Promise<string | null> {
@@ -319,6 +348,86 @@ router.post('/:id/disconnect-user', async (req, res) => {
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'Failed to disconnect user' });
   }
+});
+
+
+// Generate a short-lived MikroTik WireGuard bootstrap script.
+// The hub peer remains an explicit administrator action until hub automation is deployed.
+router.post('/:id/provisioning-script', async (req, res) => {
+  try {
+    const routerDevice = await prisma.router.findUnique({ where: { id: req.params.id } });
+    if (!routerDevice) { res.status(404).json({ error: 'Router not found' }); return; }
+    if (req.user?.role !== 'PLATFORM_ADMIN' && routerDevice.tenantId !== req.user?.tenantId) {
+      res.status(403).json({ error: 'Forbidden: You do not own this router' }); return;
+    }
+    if (routerDevice.vendor !== 'MIKROTIK') {
+      res.status(400).json({ error: 'Cloud-assisted bootstrap is currently available for MikroTik only' }); return;
+    }
+    if (!env.PUBLIC_API_BASE_URL || !env.PUBLIC_API_BASE_URL.startsWith('https://') ||
+        !env.WIREGUARD_SERVER_ENDPOINT || !env.WIREGUARD_SERVER_PUBLIC_KEY) {
+      res.status(503).json({ error: 'WireGuard provisioning is not configured. Set PUBLIC_API_BASE_URL, WIREGUARD_SERVER_ENDPOINT and WIREGUARD_SERVER_PUBLIC_KEY first.' }); return;
+    }
+    if (!/^[A-Za-z0-9+/]{43}=$/.test(env.WIREGUARD_SERVER_PUBLIC_KEY)) {
+      res.status(503).json({ error: 'WIREGUARD_SERVER_PUBLIC_KEY is not a valid WireGuard public key' }); return;
+    }
+
+    // Allocate an unused address from the dedicated 10.250.0.0/16 management subnet.
+    const existing = await prisma.routerProvisioningEnrollment.findMany({ select: { assignedAddress: true } });
+    const used = new Set(existing.map((item) => item.assignedAddress.split('/')[0]));
+    let hostNumber = 2;
+    while (hostNumber < 65535 && used.has('10.250.' + Math.floor(hostNumber / 256) + '.' + (hostNumber % 256))) hostNumber++;
+    if (hostNumber >= 65535) { res.status(503).json({ error: 'No free WireGuard router addresses remain' }); return; }
+    const assignedAddress = '10.250.' + Math.floor(hostNumber / 256) + '.' + (hostNumber % 256) + '/32';
+    const token = crypto.randomBytes(32).toString('base64url');
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const enrollment = await prisma.routerProvisioningEnrollment.create({
+      data: { routerId: routerDevice.id, tokenHash, assignedAddress, expiresAt: new Date(Date.now() + 30 * 60 * 1000) },
+    });
+    const callbackUrl = env.PUBLIC_API_BASE_URL.replace(/\/$/, '') + '/api/routers/provisioning/enroll';
+    const wgName = 'poafi-mgmt';
+    const script = [
+      '# PoaFi one-time MikroTik management tunnel bootstrap',
+      '# Token expires in 30 minutes. Run only on the router assigned to this operator.',
+      ':local wgName "' + wgName + '"',
+      ':if ([:len [/interface/wireguard/find where name=$wgName]] = 0) do={ /interface/wireguard/add name=$wgName comment="PoaFi management tunnel" }',
+      ':local wgId [/interface/wireguard/find where name=$wgName]',
+      ':local routerPublicKey [/interface/wireguard/get $wgId public-key]',
+      '/ip/address/remove [find comment="PoaFi management tunnel address"]',
+      '/ip/address/add address="' + assignedAddress + '" interface=$wgName comment="PoaFi management tunnel address"',
+      '/interface/wireguard/peers/remove [find comment="PoaFi management server peer"]',
+      '/interface/wireguard/peers/add interface=$wgName public-key="' + env.WIREGUARD_SERVER_PUBLIC_KEY + '" endpoint-address="' + env.WIREGUARD_SERVER_ENDPOINT + '" endpoint-port=' + env.WIREGUARD_SERVER_PORT + ' allowed-address="' + env.WIREGUARD_SERVER_ADDRESS + '/32" persistent-keepalive=25 comment="PoaFi management server peer"',
+      ':local payload ("{\\"token\\":\\"' + token + '\\",\\"publicKey\\":\\"" . $routerPublicKey . "\\"}")',
+      '/tool/fetch url="' + callbackUrl + '" http-method=post http-header-field="Content-Type: application/json" http-data=$payload output=none',
+      ':put "PoaFi tunnel interface configured. Router public key submitted; server peer approval is still required."',
+      ':put ("Router WireGuard public key: " . $routerPublicKey)',
+    ].join('\n');
+
+    const serverPeerCommand = '/interface/wireguard/peers/add interface=' + env.WIREGUARD_SERVER_INTERFACE +
+      ' public-key="<ROUTER_PUBLIC_KEY_FROM_ENROLLMENT>" allowed-address=' + assignedAddress +
+      ' comment="PoaFi router ' + routerDevice.id + '"';
+    res.json({
+      enrollmentId: enrollment.id, expiresAt: enrollment.expiresAt, assignedAddress, script, serverPeerCommand,
+      warning: 'The tunnel is not active until the server peer command is applied on the WireGuard hub. Do not expose RouterOS API or Winbox to the public internet.',
+    });
+  } catch (error: any) {
+    console.error('MikroTik provisioning script error:', error);
+    res.status(500).json({ error: error.message || 'Could not generate provisioning script' });
+  }
+});
+
+router.get('/:id/provisioning-status', async (req, res) => {
+  try {
+    const device = await prisma.router.findUnique({ where: { id: req.params.id } });
+    if (!device) { res.status(404).json({ error: 'Router not found' }); return; }
+    if (req.user?.role !== 'PLATFORM_ADMIN' && device.tenantId !== req.user?.tenantId) {
+      res.status(403).json({ error: 'Forbidden: You do not own this router' }); return;
+    }
+    const enrollment = await prisma.routerProvisioningEnrollment.findFirst({
+      where: { routerId: device.id }, orderBy: { createdAt: 'desc' },
+      select: { id: true, assignedAddress: true, routerPublicKey: true, status: true, expiresAt: true, createdAt: true },
+    });
+    res.json({ enrollment });
+  } catch { res.status(500).json({ error: 'Could not fetch provisioning status' }); }
 });
 
 export default router;
