@@ -45,10 +45,6 @@ router.post('/redeem', redeemLimiter, validate(redeemVoucherSchema), async (req,
       return;
     }
 
-<<<<<<< HEAD
-    // If this Operator uses shared RADIUS authentication, the voucher must
-    // be entered in the NAS's own captive-portal login form. This public page
-    // must not consume or activate it because it cannot perform the NAS login.
     const radiusNas = await prisma.radiusNas.findFirst({
       where: {
         tenantId: voucher.tenantId,
@@ -70,7 +66,6 @@ router.post('/redeem', redeemLimiter, validate(redeemVoucherSchema), async (req,
       return;
     }
 
-    // Native router fallback: honor the router assigned to the package.
     const routerWhere = voucher.package.routerId
       ? { id: voucher.package.routerId, tenantId: voucher.tenantId, status: 'ONLINE' }
       : { tenantId: voucher.tenantId, status: 'ONLINE' };
@@ -81,8 +76,6 @@ router.post('/redeem', redeemLimiter, validate(redeemVoucherSchema), async (req,
       return;
     }
 
-    // Atomically claim the voucher before touching the device. This prevents
-    // simultaneous redemption requests from provisioning the same voucher twice.
     const claim = await prisma.voucher.updateMany({
       where: { id: voucher.id, status: 'UNUSED' },
       data: { status: 'REDEEMING' },
@@ -93,32 +86,6 @@ router.post('/redeem', redeemLimiter, validate(redeemVoucherSchema), async (req,
     }
     claimedVoucherId = voucher.id;
 
-=======
-    // Honor the router assigned to the package. Only unassigned packages use
-    // the tenant's first online gateway as a fallback.
-    const routerWhere = voucher.package.routerId
-      ? { id: voucher.package.routerId, tenantId: voucher.tenantId, status: 'ONLINE' }
-      : { tenantId: voucher.tenantId, status: 'ONLINE' };
-    const routerDevice = await prisma.router.findFirst({ where: routerWhere });
-
-    if (!routerDevice) {
-      res.status(503).json({ error: 'The Wi-Fi gateway assigned to this package is currently unreachable. Please alert support.' });
-      return;
-    }
-
-    // Atomically claim the voucher before touching the device. This prevents
-    // simultaneous redemption requests from provisioning the same voucher twice.
-    const claim = await prisma.voucher.updateMany({
-      where: { id: voucher.id, status: 'UNUSED' },
-      data: { status: 'REDEEMING' },
-    });
-    if (claim.count !== 1) {
-      res.status(409).json({ error: 'This voucher is already being redeemed. Please retry only if it remains unused.' });
-      return;
-    }
-    claimedVoucherId = voucher.id;
-
->>>>>>> feature/operator-admin-device-setup-workflow
     const routerPassword = decryptSecret(routerDevice.encryptedPassword);
     const adapter = RouterAdapterFactory.getAdapter(routerDevice.vendor, {
       host: routerDevice.host,

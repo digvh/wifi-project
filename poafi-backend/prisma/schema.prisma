@@ -98,6 +98,7 @@ model DeviceSetupRequest {
   deviceName      String?
   deviceVendor    String?
   deviceModelId   String?
+  routerId        String?
   macAddress      String?
   serialNumber    String?
   notes           String?
@@ -108,12 +109,12 @@ model DeviceSetupRequest {
 
   tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   deviceModel     NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
+  router          Router?             @relation(fields: [routerId], references: [id], onDelete: SetNull)
   assignedTo      User?               @relation("AssignedSetupRequests", fields: [assignedToId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([status])
 }
-
 model Package {
   id              String    @id @default(uuid())
   tenantId        String
