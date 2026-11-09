@@ -170,7 +170,7 @@ model RadiusNas {
   id              String   @id @default(uuid())
   tenantId        String
   routerId        String?
-  vendor          String   @default("GENERIC")
+  vendor          String   @default("GENERIC") @db.VarChar(80)
   model           String?
   name            String
   nasname         String   @unique @db.VarChar(128)
