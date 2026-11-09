@@ -8,6 +8,14 @@ const envSchema = z.object({
   JWT_SECRET: z.string(),
   CREDENTIAL_ENCRYPTION_KEY: z.string().length(32),
 
+  // Optional WireGuard hub settings for MikroTik cloud-assisted provisioning.
+  PUBLIC_API_BASE_URL: z.string().url().optional(),
+  WIREGUARD_SERVER_ENDPOINT: z.string().optional(),
+  WIREGUARD_SERVER_PUBLIC_KEY: z.string().optional(),
+  WIREGUARD_SERVER_ADDRESS: z.string().default("10.250.0.1"),
+  WIREGUARD_SERVER_PORT: z.coerce.number().int().min(1).max(65535).default(51820),
+  WIREGUARD_SERVER_INTERFACE: z.string().default("wg-poafi"),
+
   // Platform Master Payment Gateway (Mode B: Central Aggregation)
   AZAMPAY_APP_NAME: z.string().optional(),
   AZAMPAY_CLIENT_ID: z.string().optional(),
