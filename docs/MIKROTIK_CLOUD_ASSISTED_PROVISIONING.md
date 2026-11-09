@@ -29,6 +29,6 @@ The API refuses to generate a script until the HTTPS URL, hub endpoint, and vali
 - This code does not deploy the WireGuard hub, configure hub firewall/routing, or automatically install the server peer.
 - It does not configure hotspot, SSID, VLAN, WAN, or customer traffic.
 - Do not expose RouterOS API or Winbox to the public internet. Restrict management services to the VPN address only after tunnel testing.
-- Test on the isolated VirtualBox MikroTik CHR lab first.
+- Test on the newly acquired physical MikroTik only after identifying its exact model, confirming RouterOS version, and preparing a safe rollback/export. Do not run the generated script on a production router.
 - A successful enrollment callback means only that the router submitted its public key; it does not prove a WireGuard handshake or API reachability.
 - RouterOS WireGuard peer behavior is documented in the [official RouterOS manual](https://manual.mikrotik.com/docs/virtual-private-networks/wireguard/).
