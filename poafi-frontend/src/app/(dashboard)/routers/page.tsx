@@ -61,6 +61,7 @@ export default function RoutersPage() {
   const [loadingSessions, setLoadingSessions] = useState(false);
   const [provisioningRouterId, setProvisioningRouterId] = useState<string | null>(null);
   const [provisioningData, setProvisioningData] = useState<any | null>(null);
+  const [provisioningStatus, setProvisioningStatus] = useState<any | null>(null);
   const [generatingProvisioning, setGeneratingProvisioning] = useState(false);
 
   const fetchData = async () => {
@@ -205,6 +206,16 @@ export default function RoutersPage() {
     }
   };
 
+
+  const refreshProvisioningStatus = async (routerId: string) => {
+    try {
+      const result = await apiFetch("/routers/" + routerId + "/provisioning-status");
+      setProvisioningStatus(result.enrollment || null);
+    } catch (err: any) {
+      setError(err.message || "Could not refresh provisioning status");
+    }
+  };
+
   const handleDelete = async (id: string, name: string) => {
     if (!confirm(`Are you sure you want to delete router "${name}"?`)) return;
     try {
@@ -272,7 +283,7 @@ export default function RoutersPage() {
               <h2 className="text-lg font-semibold">MikroTik cloud-assisted setup</h2>
               <p className="text-xs text-gray-400 mt-1">Router address: {provisioningData.assignedAddress} · Token expires: {new Date(provisioningData.expiresAt).toLocaleString()}</p>
             </div>
-            <button onClick={() => { setProvisioningData(null); setProvisioningRouterId(null); }} className="text-xs text-gray-300 bg-white/10 px-3 py-2 rounded-lg">Close</button>
+            <button onClick={() => { setProvisioningData(null); setProvisioningStatus(null); setProvisioningRouterId(null); }} className="text-xs text-gray-300 bg-white/10 px-3 py-2 rounded-lg">Close</button>
           </div>
           <div className="bg-amber-500/10 border border-amber-500/20 text-amber-200 text-xs p-3 rounded-lg">
             {provisioningData.warning} Test on your isolated VirtualBox MikroTik first. Do not run on a production router until the PoaFi WireGuard hub has been configured and reviewed.
@@ -287,9 +298,14 @@ export default function RoutersPage() {
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2">
               <h3 className="text-sm font-semibold">2. Server peer command — platform administrator only</h3>
-              <button onClick={() => navigator.clipboard.writeText(provisioningData.serverPeerCommand)} className="text-xs bg-white/10 text-gray-200 px-3 py-2 rounded-lg">Copy command</button>
+              <div className="flex gap-2">
+                <button onClick={() => provisioningRouterId && refreshProvisioningStatus(provisioningRouterId)} className="text-xs bg-white/10 text-gray-200 px-3 py-2 rounded-lg">Refresh enrollment</button>
+                <button onClick={() => navigator.clipboard.writeText(provisioningStatus?.routerPublicKey ? provisioningData.serverPeerCommand.replace("<ROUTER_PUBLIC_KEY_FROM_ENROLLMENT>", provisioningStatus.routerPublicKey) : provisioningData.serverPeerCommand)} className="text-xs bg-white/10 text-gray-200 px-3 py-2 rounded-lg">Copy command</button>
+              </div>
             </div>
-            <pre className="whitespace-pre-wrap break-all bg-black/40 border border-white/10 rounded-lg p-3 text-[11px] text-gray-200">{provisioningData.serverPeerCommand}</pre>
+            <pre className="whitespace-pre-wrap break-all bg-black/40 border border-white/10 rounded-lg p-3 text-[11px] text-gray-200">{provisioningStatus?.routerPublicKey ? provisioningData.serverPeerCommand.replace("<ROUTER_PUBLIC_KEY_FROM_ENROLLMENT>", provisioningStatus.routerPublicKey) : provisioningData.serverPeerCommand}</pre>
+            <p className="text-xs text-gray-400">Enrollment status: {provisioningStatus?.status || "Not refreshed yet"}</p>
+            {provisioningStatus?.routerPublicKey && <p className="text-xs text-gray-300 break-all">Router public key: {provisioningStatus.routerPublicKey}</p>}
             <p className="text-xs text-gray-400">Replace the placeholder with the router public key returned by the enrollment callback, then apply this on the WireGuard hub. The UI does not mark the router online merely because a script was generated.</p>
           </div>
         </div>
