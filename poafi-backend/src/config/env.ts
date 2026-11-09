@@ -8,6 +8,13 @@ const envSchema = z.object({
   JWT_SECRET: z.string(),
   CREDENTIAL_ENCRYPTION_KEY: z.string().length(32),
 
+// Optional FreeRADIUS bridge. Keep disabled until the separate RADIUS
+  // service is deployed and its internal shared secret is configured.
+  RADIUS_ENABLED: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(false),
+  RADIUS_SERVER_HOST: z.string().optional(),
+  RADIUS_REST_SHARED_SECRET: z.string().min(32).optional(),
+  PUBLIC_APP_URL: z.string().url().optional(),
+
   // Optional WireGuard hub settings for MikroTik cloud-assisted provisioning.
   PUBLIC_API_BASE_URL: z.string().url().optional(),
   WIREGUARD_SERVER_ENDPOINT: z.string().optional(),
