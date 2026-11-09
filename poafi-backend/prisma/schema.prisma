@@ -44,6 +44,7 @@ model Router {
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   packages          Package[]
   setupRequests     DeviceSetupRequest[]
+  provisioningEnrollments RouterProvisioningEnrollment[]
   deviceModel       NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
   deviceModelId     String?
   siteName          String?
@@ -216,4 +217,22 @@ model DeviceSetupRequest {
   @@index([setupMode, status])
   @@index([routerId])
   @@index([deviceModelId])
+}
+
+
+model RouterProvisioningEnrollment {
+  id              String   @id @default(uuid())
+  routerId        String
+  tokenHash       String   @unique
+  assignedAddress String   @unique
+  routerPublicKey String?
+  status          String   @default("SCRIPT_ISSUED")
+  expiresAt       DateTime
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  router Router @relation(fields: [routerId], references: [id], onDelete: Cascade)
+
+  @@index([routerId, status])
+  @@index([expiresAt])
 }
