@@ -33,7 +33,8 @@ router.get('/public/:tenantSlug', async (req, res) => {
       orderBy: { priceTzs: 'asc' },
     });
 
-    res.json({ operator: tenant.name, packages });
+    // Return paymentMode so the portal knows whether to show Voucher/Mobile Money tabs
+    res.json({ operator: tenant.name, paymentMode: (tenant as any).paymentMode || "MIXED", packages });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch public packages' });
   }
@@ -42,7 +43,6 @@ router.get('/public/:tenantSlug', async (req, res) => {
 // Protected routes below
 router.use(requireAuth);
 
-// Get all packages (Operator sees theirs; Admin can see all or filter by tenantId)
 router.get('/', async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page as string) || 1);
@@ -74,19 +74,13 @@ router.get('/', async (req, res) => {
 
     res.json({
       packages,
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: { page, limit, total, totalPages: Math.ceil(total / limit) },
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch packages' });
   }
 });
 
-// Create a new package
 router.post('/', validate(createPackageSchema), async (req, res) => {
   try {
     const { name, priceTzs, durationMinutes, downloadKbps, uploadKbps, routerId } = req.body;
@@ -98,17 +92,6 @@ router.post('/', validate(createPackageSchema), async (req, res) => {
     if (!targetTenantId) {
       res.status(403).json({ error: 'Tenant context is required to create packages' });
       return;
-    }
-
-    if (routerId) {
-      const linkedRouter = await prisma.router.findFirst({
-        where: { id: routerId, tenantId: targetTenantId },
-        select: { id: true },
-      });
-      if (!linkedRouter) {
-        res.status(400).json({ error: 'The selected router does not belong to this Operator' });
-        return;
-      }
     }
 
     const newPackage = await prisma.package.create({
@@ -129,7 +112,6 @@ router.post('/', validate(createPackageSchema), async (req, res) => {
   }
 });
 
-// Update an existing package
 router.put('/:id', validate(updatePackageSchema), async (req, res) => {
   try {
     const packageId = req.params.id;
@@ -144,17 +126,6 @@ router.put('/:id', validate(updatePackageSchema), async (req, res) => {
     if (req.user?.role !== 'PLATFORM_ADMIN' && existingPackage.tenantId !== req.user?.tenantId) {
       res.status(403).json({ error: 'Forbidden: You do not own this package' });
       return;
-    }
-
-    if (routerId) {
-      const linkedRouter = await prisma.router.findFirst({
-        where: { id: routerId, tenantId: existingPackage.tenantId },
-        select: { id: true },
-      });
-      if (!linkedRouter) {
-        res.status(400).json({ error: 'The selected router does not belong to this Operator' });
-        return;
-      }
     }
 
     const updated = await prisma.package.update({
@@ -175,7 +146,6 @@ router.put('/:id', validate(updatePackageSchema), async (req, res) => {
   }
 });
 
-// Delete a package
 router.delete('/:id', async (req, res) => {
   try {
     const packageId = req.params.id;

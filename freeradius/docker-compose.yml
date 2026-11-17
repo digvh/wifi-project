@@ -1,0 +1,17 @@
+services:
+  freeradius:
+    image: freeradius/freeradius-server:latest
+    container_name: poafi-freeradius
+    restart: unless-stopped
+    ports:
+      - "1812:1812/udp"
+      - "1813:1813/udp"
+    environment:
+      - POAFI_API_URL=${POAFI_API_URL:-http://host.docker.internal:4000/api/radius}
+      - RADIUS_REST_SHARED_SECRET=${RADIUS_REST_SHARED_SECRET}
+    volumes:
+      - ./mods-enabled/rest:/etc/freeradius/mods-enabled/rest:ro
+      - ./sites-enabled/default:/etc/freeradius/sites-enabled/default:ro
+      - ./sites-enabled/dynamic-clients:/etc/freeradius/sites-enabled/dynamic-clients:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"

@@ -1,6 +1,7 @@
 import { prisma } from '../../config/database';
 import { decryptSecret } from '../../utils/crypto';
 import { RouterAdapterFactory } from '../network';
+import { PaymentService } from '../payment/PaymentService';
 
 export class VoucherCleanupService {
   private static isRunning = false;
@@ -136,9 +137,15 @@ export class VoucherCleanupService {
     );
 
     this.cleanupExpiredVouchers();
+    PaymentService.retryPendingProvisions().catch((err) =>
+      console.error('[PaymentRecovery] Retry error:', err)
+    );
 
     return setInterval(() => {
       this.cleanupExpiredVouchers();
+      PaymentService.retryPendingProvisions().catch((err) =>
+        console.error('[PaymentRecovery] Retry error:', err)
+      );
     }, intervalMs);
   }
 }

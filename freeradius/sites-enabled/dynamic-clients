@@ -1,0 +1,16 @@
+client dynamic {
+    ipaddr = 0.0.0.0/0
+    dynamic_clients = dynamic_clients
+    lifetime = 300
+}
+
+server dynamic_clients {
+    authorize {
+        if ("%{rest:POST $ENV{POAFI_API_URL}/resolve-client}" == "ok") {
+            ok
+        }
+        else {
+            reject
+        }
+    }
+}

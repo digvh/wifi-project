@@ -18,6 +18,7 @@ router.get('/overview', async (req, res) => {
 
     const now = new Date();
     const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
 
     const [
       activeSessionsCount,
@@ -25,9 +26,11 @@ router.get('/overview', async (req, res) => {
       unusedVouchersCount,
       allPayments,
       todayPayments,
+      monthPayments,
       onlineRoutersCount,
       totalRoutersCount,
       tenantsCount,
+      sitesRaw,
     ] = await Promise.all([
       // Active sessions: vouchers currently marked active and not yet expired
       prisma.voucher.count({
@@ -67,6 +70,17 @@ router.get('/overview', async (req, res) => {
         _count: true,
       }),
 
+      // This month's revenue
+      prisma.payment.aggregate({
+        where: {
+          ...whereClause,
+          status: 'SUCCESS',
+          createdAt: { gte: startOfMonth },
+        },
+        _sum: { amount: true },
+        _count: true,
+      }),
+
       // Online routers
       prisma.router.count({
         where: { ...whereClause, status: 'ONLINE' },
@@ -77,17 +91,38 @@ router.get('/overview', async (req, res) => {
 
       // Total tenants (if platform admin)
       isPlatformAdmin ? prisma.tenant.count() : 1,
+
+      // Per-site router health breakdown
+      (prisma as any).site.findMany({
+        where: whereClause,
+        include: {
+          routers: { select: { id: true, status: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      }),
     ]);
 
     const totalRevenueTzs = allPayments._sum.amount || 0;
     const todayRevenueTzs = todayPayments._sum.amount || 0;
+    const monthRevenueTzs = monthPayments._sum.amount || 0;
+
+    const sitesSummary = (sitesRaw || []).map((s: any) => ({
+      id: s.id,
+      name: s.name,
+      address: s.address,
+      totalRouters: s.routers?.length || 0,
+      onlineRouters: (s.routers || []).filter((r: any) => r.status === 'ONLINE').length,
+    }));
 
     res.json({
       activeSessions: activeSessionsCount,
       totalRevenueTzs,
       todayRevenueTzs,
+      monthRevenueTzs,
       successfulTransactions: allPayments._count || 0,
       todayTransactions: todayPayments._count || 0,
+      monthTransactions: monthPayments._count || 0,
       vouchers: {
         total: totalVouchersCount,
         active: activeSessionsCount,
@@ -99,6 +134,7 @@ router.get('/overview', async (req, res) => {
         online: onlineRoutersCount,
         offline: Math.max(0, totalRoutersCount - onlineRoutersCount),
       },
+      sitesSummary,
       tenantsCount: isPlatformAdmin ? tenantsCount : 1,
     });
   } catch (error) {
@@ -185,6 +221,7 @@ router.get('/routers-health', async (req, res) => {
     const safeRouters = routers.map(({ encryptedPassword, ...r }) => r);
     res.json({ routers: safeRouters });
   } catch (error) {
+    console.error('Stats router health error:', error);
     res.status(500).json({ error: 'Failed to fetch router health status' });
   }
 });

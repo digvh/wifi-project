@@ -1,11 +1,16 @@
+import crypto from 'crypto';
 import { IPaymentGateway, PaymentProvider, WebhookResult } from './types';
 import { isPaymentSimulationAllowed } from './paymentSafety';
+
+export class WebhookNotConfiguredError extends Error {}
+export class UnauthorizedWebhookError extends Error {}
 
 export interface AzamPayConfig {
   appName?: string;
   clientId?: string;
   apiKey?: string;
   clientSecret?: string;
+  webhookSecret?: string;
   isLive?: boolean;
   allowSimulation?: boolean;
   nodeEnv?: string;
@@ -159,10 +164,42 @@ export class AzamPayGateway implements IPaymentGateway {
     };
   }
 
-  verifyWebhook(_payload: any, _signature?: string): WebhookResult {
-    // The current integration has no verified AzamPay callback-authentication implementation.
-    // Never trust status fields from an unauthenticated public request.
-    throw new Error('Payment callback verification is not configured');
+  verifyWebhook(
+    payload: any,
+    signature?: string,
+    options?: { webhookSecret?: string; rawBody?: Buffer | string },
+  ): WebhookResult {
+    const secret = options?.webhookSecret || this.config.webhookSecret;
+    if (!secret) {
+      throw new WebhookNotConfiguredError('Payment callback verification is not configured');
+    }
+    if (!signature || typeof signature !== 'string') {
+      throw new UnauthorizedWebhookError('Missing webhook signature');
+    }
+
+    const raw = options?.rawBody ?? JSON.stringify(payload ?? {});
+    const expectedHex = crypto.createHmac('sha256', secret).update(raw).digest('hex');
+    const providedHex = signature.trim().replace(/^sha256=/i, '').toLowerCase();
+
+    const a = Buffer.from(expectedHex, 'hex');
+    const b = Buffer.from(providedHex, 'hex');
+    if (a.length === 0 || a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      throw new UnauthorizedWebhookError('Invalid webhook signature');
+    }
+
+    const reference = String(payload?.utilityref || payload?.externalId || payload?.reference || '').trim();
+    const rawStatus = String(payload?.transactionstatus || payload?.status || '').toLowerCase();
+    const status = rawStatus === 'success' || rawStatus === 'completed' || payload?.success === true ? 'SUCCESS' : 'FAILED';
+    const amount = Number(payload?.amount || 0);
+    const externalId = payload?.transactionId || payload?.transid || undefined;
+
+    return {
+      reference,
+      externalId,
+      status,
+      amount: Number.isFinite(amount) ? amount : 0,
+      rawPayload: payload,
+    };
   }
 }
 

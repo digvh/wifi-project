@@ -26,6 +26,7 @@ type Application = {
   email: string;
   phone: string;
   city: string;
+  hasPassword?: boolean;
   message?: string;
   status: "PENDING" | "APPROVED" | "REJECTED";
   createdAt: string;
@@ -69,6 +70,8 @@ export default function ApplicationsPage() {
     }
   }, [user]);
 
+  const [overridePassword, setOverridePassword] = useState(false);
+
   const handleApprove = async () => {
     if (!approvingApp) return;
     setActionLoading(true);
@@ -76,9 +79,14 @@ export default function ApplicationsPage() {
     setActionSuccess("");
 
     try {
+      const payload: any = {};
+      if (overridePassword || !approvingApp.hasPassword) {
+        payload.password = approvalPassword;
+      }
+
       const res = await apiFetch(`/applications/${approvingApp.id}/approve`, {
         method: "POST",
-        body: JSON.stringify({ password: approvalPassword }),
+        body: JSON.stringify(payload),
       });
       setActionSuccess(res.message);
       setTimeout(() => {
@@ -356,41 +364,73 @@ export default function ApplicationsPage() {
             )}
 
             <div className="mt-5 space-y-4">
-              <div>
-                <label className="block text-xs font-medium text-gray-300 mb-1">
-                  Assign Initial Password for Operator:
-                </label>
-                <div className="relative">
-                  <KeyRound className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
-                  <input
-                    type="text"
-                    value={approvalPassword}
-                    onChange={(e) => setApprovalPassword(e.target.value)}
-                    className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[#00f3ff]"
-                    placeholder="Min 8 characters"
-                  />
+              {approvingApp.hasPassword ? (
+                <div className="p-3.5 bg-green-500/10 border border-green-500/30 rounded-xl space-y-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-green-400">
+                    <CheckCircle size={15} />
+                    <span>Nenosiri Limetengenezwa Tayari / Password Already Set</span>
+                  </div>
+                  <p className="text-xs text-gray-300">
+                    Operator huyu tayari ameweka nenosiri lake la siri alipojiandikisha. Hakuna haja ya kuandika chochote tena — bonyeza kitufe hapa chini kuthibitisha akaunti yake moja kwa moja.
+                  </p>
+                  <div className="pt-1 text-[11px] text-gray-400 border-t border-green-500/20 flex justify-between">
+                    <span>Eneo (Site ya Kwanza):</span>
+                    <strong className="text-[#00f3ff]">{approvingApp.city} (Itawekwa kiotomatiki)</strong>
+                  </div>
+
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={() => setOverridePassword(!overridePassword)}
+                      className="text-[11px] text-[#00f3ff] hover:underline"
+                    >
+                      {overridePassword ? "← Tumia nenosiri la mteja (Pendekezo)" : "Badilisha nenosiri kwa lazima (Optional)"}
+                    </button>
+                  </div>
                 </div>
-                <p className="text-[11px] text-gray-500 mt-1">
-                  Share this password with the operator so they can sign in to the portal.
+              ) : (
+                <p className="text-xs text-gray-400">
+                  Ombi hili halina nenosiri lililotengenezwa awali. Weka nenosiri la kuanzia hapa chini:
                 </p>
-              </div>
+              )}
+
+              {(!approvingApp.hasPassword || overridePassword) && (
+                <div>
+                  <label className="block text-xs font-medium text-gray-300 mb-1">
+                    {overridePassword ? "Nenosiri Jipya (Override Password):" : "Assign Initial Password for Operator:"}
+                  </label>
+                  <div className="relative">
+                    <KeyRound className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
+                    <input
+                      type="text"
+                      value={approvalPassword}
+                      onChange={(e) => setApprovalPassword(e.target.value)}
+                      className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[#00f3ff]"
+                      placeholder="Min 8 characters"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="flex justify-end gap-3 pt-2">
                 <button
                   type="button"
                   disabled={actionLoading}
-                  onClick={() => setApprovingApp(null)}
+                  onClick={() => {
+                    setApprovingApp(null);
+                    setOverridePassword(false);
+                  }}
                   className="px-4 py-2 text-xs text-gray-400 hover:text-white"
                 >
                   Cancel
                 </button>
                 <button
                   type="button"
-                  disabled={actionLoading || !approvalPassword || approvalPassword.length < 8}
+                  disabled={actionLoading || (overridePassword && (!approvalPassword || approvalPassword.length < 8))}
                   onClick={handleApprove}
-                  className="px-5 py-2 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-xl text-xs hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5"
+                  className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-xl text-xs hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 shadow-lg shadow-green-500/20"
                 >
-                  {actionLoading ? "Processing..." : "Confirm & Create Account"}
+                  {actionLoading ? "Processing..." : "Confirm & Activate Workspace"}
                 </button>
               </div>
             </div>

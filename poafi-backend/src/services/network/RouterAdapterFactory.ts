@@ -1,5 +1,6 @@
 import { IRouterAdapter, RouterVendor, RouterConnectionConfig } from './types';
 import { MikroTikAdapter } from './adapters/MikroTikAdapter';
+import { TPLinkOmadaAdapter } from './adapters/TPLinkOmadaAdapter';
 import { getVendorIntegration, normalizeRouterVendor } from './integrationRegistry';
 
 export type RouterAdapterBuilder = (config: RouterConnectionConfig) => IRouterAdapter;
@@ -14,6 +15,7 @@ export type RouterAdapterBuilder = (config: RouterConnectionConfig) => IRouterAd
 export class RouterAdapterFactory {
   private static readonly adapters = new Map<string, RouterAdapterBuilder>([
     ['MIKROTIK', (config) => new MikroTikAdapter(config)],
+    ['TPLINK_OMADA', (config) => new TPLinkOmadaAdapter(config)],
   ]);
 
   static registerAdapter(vendor: string, builder: RouterAdapterBuilder): void {

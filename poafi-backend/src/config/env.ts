@@ -21,16 +21,31 @@ const envSchema = z.object({
   RADIUS_SERVER_HOST: z.string().optional(),
   RADIUS_REST_SHARED_SECRET: z.string().min(32).optional(),
   PUBLIC_APP_URL: z.string().url().optional(),
+  // Public HTTPS URL of this API, reachable from routers (used by the enrollment phone-home)
+  PUBLIC_API_URL: z.string().url().optional(),
+  // Comma-separated allowed CORS origins for production (e.g. https://poafi.com,https://app.poafi.com)
+  CORS_ORIGIN: z.string().optional(),
 
   // Platform Master Payment Gateway (Mode B: Central Aggregation)
   AZAMPAY_APP_NAME: z.string().optional(),
   AZAMPAY_CLIENT_ID: z.string().optional(),
   AZAMPAY_API_KEY: z.string().optional(),
   AZAMPAY_CLIENT_SECRET: z.string().optional(),
+  AZAMPAY_WEBHOOK_SECRET: z.string().optional(),
   AZAMPAY_IS_LIVE: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(false),
+
+  // Optional Beem Africa SMS Gateway (Tanzania)
+  BEEM_API_KEY: z.string().optional(),
+  BEEM_SECRET_KEY: z.string().optional(),
+  BEEM_SENDER_ID: z.string().default('POAFI'),
 
   // Platform Commission % for Mode B (e.g. 10 = You keep 10%, Operator gets 90%)
   PLATFORM_COMMISSION_PERCENT: z.coerce.number().default(10),
+
+  // WireGuard Cloud VPN Configuration
+  WG_SERVER_ENDPOINT: z.string().optional(),
+  WG_SERVER_PUBLIC_KEY: z.string().optional(),
+  WG_SERVER_IP: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

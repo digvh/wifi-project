@@ -11,6 +11,7 @@ model Tenant {
   name          String
   slug          String         @unique
   isActive      Boolean        @default(true)
+  paymentMode   String         @default("MIXED") // MOBILE_ONLY, VOUCHER_ONLY, MIXED
   createdAt     DateTime       @default(now())
   users         User[]
   routers       Router[]
@@ -20,6 +21,9 @@ model Tenant {
   paymentConfig PaymentConfig?
   radiusNas     RadiusNas[]
   deviceSetupRequests DeviceSetupRequest[]
+  sites         Site[]
+  payoutMethods PayoutMethod[]
+  withdrawals   Withdrawal[]
 }
 
 model User {
@@ -32,9 +36,21 @@ model User {
   assignedSetupRequests DeviceSetupRequest[] @relation("AssignedSetupRequests")
 }
 
+model Site {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  address     String?
+  createdAt   DateTime @default(now())
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  routers     Router[]
+  @@index([tenantId])
+}
+
 model Router {
   id                  String   @id @default(uuid())
   tenantId            String
+  siteId              String?
   name                String
   vendor              String   @default("MIKROTIK")
   host                String
@@ -48,8 +64,21 @@ model Router {
   connectionMode      String   @default("DIRECT")
   setupStatus         String   @default("PENDING")
   installationNotes   String?
+    // WireGuard Cloud Setup fields
+  wgPrivateKey        String?
+  wgPublicKey         String?
+  wgIp                String?
+  enrollmentToken     String?   @unique
+  enrollmentExpiresAt DateTime?
+  // Hardware details reported by the router when it phones home during enrollment
+  discoveredModel     String?
+  discoveredSerial    String?
+  discoveredIdentity  String?
+  discoveredVersion   String?
+  discoveredAt        DateTime?
 
   tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site         Site?               @relation(fields: [siteId], references: [id], onDelete: SetNull)
   packages     Package[]
   deviceModel  NetworkDeviceModel? @relation(fields: [deviceModelId], references: [id], onDelete: SetNull)
   radiusNas    RadiusNas[]
@@ -57,6 +86,7 @@ model Router {
 
   @@index([tenantId])
   @@index([deviceModelId])
+  @@index([siteId])
 }
 
 model NetworkDeviceModel {
@@ -115,6 +145,7 @@ model DeviceSetupRequest {
   @@index([tenantId])
   @@index([status])
 }
+
 model Package {
   id              String    @id @default(uuid())
   tenantId        String
@@ -125,7 +156,7 @@ model Package {
   downloadKbps    Int       @default(3000)
   uploadKbps      Int       @default(1000)
   dataLimitMb     Int?
-  type            String    @default("TIME")
+  type            String    @default("TIME") // TIME, DATA, COMBO, PPPOE
   validityDays    Int?
 
   tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
@@ -188,6 +219,35 @@ model Payment {
   @@index([status])
   @@index([reference])
   @@index([phoneNumber])
+}
+
+model PayoutMethod {
+  id            String   @id @default(uuid())
+  tenantId      String
+  type          String   // MOBILE, BANK
+  provider      String   // M-Pesa, Tigo, CRDB, NMB
+  accountNumber String
+  accountName   String?
+  isVerified    Boolean  @default(false)
+  otpCode       String?
+  otpExpiresAt  DateTime?
+  createdAt     DateTime @default(now())
+  tenant        Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  withdrawals   Withdrawal[]
+  @@index([tenantId])
+}
+
+model Withdrawal {
+  id             String   @id @default(uuid())
+  tenantId       String
+  amount         Int
+  status         String   @default("PENDING") // PENDING, PROCESSING, COMPLETED, FAILED
+  payoutMethodId String
+  createdAt      DateTime @default(now())
+  completedAt    DateTime?
+  tenant         Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payoutMethod   PayoutMethod @relation(fields: [payoutMethodId], references: [id])
+  @@index([tenantId])
 }
 
 model RadiusNas {
@@ -264,6 +324,7 @@ model OperatorApplication {
   email        String    @unique
   phone        String
   city         String
+  passwordHash String?
   message      String?
   status       String    @default("PENDING")
   createdAt    DateTime  @default(now())

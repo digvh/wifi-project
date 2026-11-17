@@ -1,13 +1,183 @@
 import { Router } from 'express';
 import { prisma } from '../config/database';
 import { requireAuth, requirePlatformAdmin } from '../middleware/auth';
-import { hashPassword } from '../utils/auth';
+import { hashPassword, comparePassword } from '../utils/auth';
 import { validate } from '../middleware/validate';
 import { createTenantSchema, updateTenantSchema, createTenantLoginSchema } from '../validators';
 
 const router = Router();
 
-// Protect ALL routes in this file. Platform Admin only.
+/**
+ * Helper to safely delete all tenant-related records in topological order
+ * to avoid foreign key constraint violations across all tables.
+ */
+async function deleteTenantCascade(tenantId: string) {
+  await prisma.$transaction(async (tx: any) => {
+    // 1. Delete Radius sessions for tenant's NASes
+    const nasList = await tx.radiusNas.findMany({
+      where: { tenantId },
+      select: { id: true },
+    });
+    const nasIds = nasList.map((n: any) => n.id);
+    if (nasIds.length > 0) {
+      await tx.radiusSession.deleteMany({
+        where: { nasId: { in: nasIds } },
+      });
+    }
+
+    // 2. Delete RadiusNas records
+    await tx.radiusNas.deleteMany({ where: { tenantId } });
+
+    // 3. Delete DeviceSetupRequests
+    await tx.deviceSetupRequest.deleteMany({ where: { tenantId } });
+
+    // 4. Delete Withdrawals (if model exists)
+    if (tx.withdrawal) {
+      await tx.withdrawal.deleteMany({ where: { tenantId } });
+    }
+
+    // 5. Delete PayoutMethods (if model exists)
+    if (tx.payoutMethod) {
+      await tx.payoutMethod.deleteMany({ where: { tenantId } });
+    }
+
+    // 6. Delete Payments
+    await tx.payment.deleteMany({ where: { tenantId } });
+
+    // 7. Delete Vouchers
+    await tx.voucher.deleteMany({ where: { tenantId } });
+
+    // 8. Delete Packages
+    await tx.package.deleteMany({ where: { tenantId } });
+
+    // 9. Delete Routers
+    await tx.router.deleteMany({ where: { tenantId } });
+
+    // 10. Delete Sites (if model exists)
+    if (tx.site) {
+      await tx.site.deleteMany({ where: { tenantId } });
+    }
+
+    // 11. Delete PaymentConfig
+    await tx.paymentConfig.deleteMany({ where: { tenantId } });
+
+    // 12. Delete Users for this tenant
+    await tx.user.deleteMany({ where: { tenantId } });
+
+    // 13. Finally delete the Tenant
+    return await tx.tenant.delete({ where: { id: tenantId } });
+  });
+}
+
+// ---------------------------------------------------------------------------
+// OPERATOR SELF-SERVICE ROUTES (Tenant Owner)
+// ---------------------------------------------------------------------------
+
+// Get operator's own tenant settings and profile info
+router.get('/settings', requireAuth, async (req, res) => {
+  try {
+    if (req.user?.role !== 'TENANT_OWNER' || !req.user.tenantId) {
+      res.status(403).json({ error: 'Only operators can access tenant settings' });
+      return;
+    }
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.user.tenantId },
+      include: {
+        _count: {
+          select: {
+            routers: true,
+            packages: true,
+            vouchers: true,
+            sites: true,
+          },
+        },
+      },
+    });
+
+    if (!tenant) {
+      res.status(404).json({ error: 'Tenant record not found' });
+      return;
+    }
+
+    res.json({ tenant });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch settings' });
+  }
+});
+
+// Update operator's own settings (e.g., payment mode, business name)
+router.patch('/settings', requireAuth, async (req, res) => {
+  try {
+    if (req.user?.role !== 'TENANT_OWNER' || !req.user.tenantId) {
+      res.status(403).json({ error: 'Only operators can update their own settings' });
+      return;
+    }
+    const { paymentMode, name } = req.body;
+    if (paymentMode && !['MOBILE_ONLY', 'VOUCHER_ONLY', 'MIXED'].includes(paymentMode)) {
+      res.status(400).json({ error: 'Invalid payment mode. Must be MOBILE_ONLY, VOUCHER_ONLY, or MIXED.' });
+      return;
+    }
+
+    const updated = await prisma.tenant.update({
+      where: { id: req.user.tenantId },
+      data: {
+        ...(paymentMode && { paymentMode }),
+        ...(name && { name }),
+      },
+    });
+
+    res.json({ message: 'Settings updated successfully', tenant: updated });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to update settings' });
+  }
+});
+
+// Operator deletes their own account and all related hotspot data permanently
+router.delete('/my-account', requireAuth, async (req, res) => {
+  try {
+    if (req.user?.role !== 'TENANT_OWNER' || !req.user.tenantId) {
+      res.status(403).json({ error: 'Only registered operators can delete their account' });
+      return;
+    }
+
+    const { password, confirmation } = req.body;
+
+    const user = await prisma.user.findUnique({ where: { id: req.user.userId } });
+    if (!user) {
+      res.status(404).json({ error: 'Mtumiaji hajapatikana / User account not found' });
+      return;
+    }
+
+    // Require either valid password OR confirmation string 'DELETE'
+    if (password) {
+      const isMatch = await comparePassword(password, user.passwordHash);
+      if (!isMatch) {
+        res.status(400).json({ error: 'Nenosiri si sahihi / Incorrect password' });
+        return;
+      }
+    } else if (confirmation !== 'DELETE') {
+      res.status(400).json({
+        error: 'Tafadhali weka nenosiri lako au thibitisha kwa kuandika DELETE / Please provide your password or type DELETE to confirm deletion',
+      });
+      return;
+    }
+
+    const tenantId = req.user.tenantId;
+    await deleteTenantCascade(tenantId);
+
+    res.json({
+      message: 'Akaunti yako na mifumo yote ya Wi-Fi imefutwa kikamilifu / Your account and all associated hotspot data have been permanently deleted',
+    });
+  } catch (error) {
+    console.error('Self account deletion error:', error);
+    res.status(500).json({ error: 'Kuna tatizo limetokea wakati wa kufuta akaunti / Failed to delete account' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PLATFORM ADMIN PROTECTED ROUTES
+// ---------------------------------------------------------------------------
 router.use(requireAuth, requirePlatformAdmin);
 
 // 1. Get all tenants (with optional pagination)
@@ -30,6 +200,7 @@ router.get('/', async (req, res) => {
               packages: true,
               vouchers: true,
               users: true,
+              sites: true,
             },
           },
         },
@@ -107,10 +278,15 @@ router.put('/:id', validate(updateTenantSchema), async (req, res) => {
   }
 });
 
-// 4. Delete a tenant (Operator)
+// 4. Admin delete a tenant (Operator) and all their data
 router.delete('/:id', async (req, res) => {
   try {
     const tenantId = req.params.id;
+
+    if (req.user?.tenantId === tenantId) {
+      res.status(400).json({ error: 'Huwezi kufuta akaunti ya admin wako mwenyewe / Cannot delete your own admin account' });
+      return;
+    }
 
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
     if (!tenant) {
@@ -118,10 +294,11 @@ router.delete('/:id', async (req, res) => {
       return;
     }
 
-    await prisma.tenant.delete({ where: { id: tenantId } });
+    await deleteTenantCascade(tenantId);
     res.json({ message: 'Operator and all associated data deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to delete operator. They might have active data.' });
+    console.error('Admin delete operator error:', error);
+    res.status(500).json({ error: 'Failed to delete operator. Database error during cascade deletion.' });
   }
 });
 

@@ -1,0 +1,35 @@
+rest {
+    tls {
+        check_cert = no
+    }
+
+    connect_uri = "$ENV{POAFI_API_URL}"
+    connect_timeout = 4.0
+
+    authorize {
+        uri = "${..connect_uri}/authorize"
+        method = 'post'
+        body = 'json'
+        header = "X-Poafi-Radius-Key: $ENV{RADIUS_REST_SHARED_SECRET}"
+        timeout = 4.0
+        force_to = 'json'
+    }
+
+    authenticate {
+        uri = "${..connect_uri}/authorize"
+        method = 'post'
+        body = 'json'
+        header = "X-Poafi-Radius-Key: $ENV{RADIUS_REST_SHARED_SECRET}"
+        timeout = 4.0
+        force_to = 'json'
+    }
+
+    accounting {
+        uri = "${..connect_uri}/accounting"
+        method = 'post'
+        body = 'json'
+        header = "X-Poafi-Radius-Key: $ENV{RADIUS_REST_SHARED_SECRET}"
+        timeout = 4.0
+        force_to = 'json'
+    }
+}

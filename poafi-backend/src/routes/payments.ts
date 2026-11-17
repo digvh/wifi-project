@@ -7,6 +7,7 @@ import { requireAuth } from '../middleware/auth';
 import { isPaymentSimulationAllowed } from '../services/payment/paymentSafety';
 import { validate } from '../middleware/validate';
 import { PaymentService } from '../services/payment/PaymentService';
+import { UnauthorizedWebhookError, WebhookNotConfiguredError } from '../services/payment/AzamPayGateway';
 import { encryptSecret } from '../utils/crypto';
 import { env } from '../config/env';
 
@@ -125,10 +126,26 @@ router.post('/:id/simulate-confirm', async (req, res) => {
   }
 });
 
-// Fail closed: no verified provider callback mechanism yet.
-// Do NOT process untrusted payloads into payment success or voucher issuance.
-router.post('/webhook', (_req, res) => {
-  res.status(503).json({ error: 'Payment callback verification is not configured' });
+// Verified webhook endpoint: requires HMAC-SHA256 signature verified against tenant or platform webhookSecret.
+// Fails closed (503) if no webhook secret is configured; rejects bad/missing signatures (401).
+router.post('/webhook', async (req: any, res) => {
+  try {
+    const signature =
+      (req.headers['x-azampay-signature'] as string | undefined) ||
+      (req.headers['x-webhook-signature'] as string | undefined);
+    const result = await PaymentService.handleWebhook(req.body, signature, req.rawBody);
+    res.json(result);
+  } catch (error: any) {
+    if (error instanceof WebhookNotConfiguredError) {
+      res.status(503).json({ error: error.message });
+      return;
+    }
+    if (error instanceof UnauthorizedWebhookError) {
+      res.status(401).json({ error: error.message });
+      return;
+    }
+    res.status(400).json({ error: error.message || 'Webhook processing failed' });
+  }
 });
 
 router.get('/', requireAuth, async (req, res) => {

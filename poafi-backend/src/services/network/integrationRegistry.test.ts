@@ -7,16 +7,18 @@ import {
   VENDOR_INTEGRATIONS,
 } from './integrationRegistry';
 
-test('only MikroTik is currently registered as a live adapter', () => {
+test('MikroTik and TP-Link Omada are registered as live adapters while other planned brands stay disabled', () => {
   assert.equal(RouterAdapterFactory.hasAdapter('MIKROTIK'), true);
-  assert.equal(RouterAdapterFactory.hasAdapter('TPLINK_OMADA'), false);
+  assert.equal(RouterAdapterFactory.hasAdapter('TPLINK_OMADA'), true);
   assert.equal(RouterAdapterFactory.hasAdapter('RUIJIE'), false);
+  assert.equal(RouterAdapterFactory.hasAdapter('CUDY'), false);
 });
 
 test('vendor registry does not confuse planned brands with implemented drivers', () => {
   assert.equal(getVendorIntegration('mikrotik')?.status, 'IMPLEMENTED');
-  assert.equal(getVendorIntegration('TPLINK_OMADA')?.status, 'PLANNED');
-  assert.deepEqual(getVendorIntegration('TPLINK_OMADA')?.capabilities, []);
+  assert.equal(getVendorIntegration('TPLINK_OMADA')?.status, 'IMPLEMENTED');
+  assert.equal(getVendorIntegration('RUIJIE')?.status, 'PLANNED');
+  assert.deepEqual(getVendorIntegration('RUIJIE')?.capabilities, []);
   assert.equal(VENDOR_INTEGRATIONS.length >= 6, true);
 });
 

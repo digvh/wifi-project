@@ -3,14 +3,9 @@ import { prisma } from '../../config/database';
 import { env } from '../../config/env';
 import { encryptSecret, decryptSecret } from '../../utils/crypto';
 import { RouterAdapterFactory } from '../network';
-import { AzamPayGateway } from './AzamPayGateway';
+import { AzamPayGateway, WebhookNotConfiguredError } from './AzamPayGateway';
 import { SmsService } from '../sms/SmsService';
-import {
-  CheckoutRequest,
-  CheckoutResponse,
-  PaymentStatus,
-  WebhookResult,
-} from './types';
+import { CheckoutRequest, CheckoutResponse, WebhookResult } from './types';
 
 export type PaymentAccessMode = 'RADIUS' | 'NATIVE';
 
@@ -20,9 +15,7 @@ export class PaymentService {
   }
 
   private static async getGatewayForTenant(tenantId: string): Promise<AzamPayGateway> {
-    const config = await prisma.paymentConfig.findUnique({
-      where: { tenantId },
-    });
+    const config = await prisma.paymentConfig.findUnique({ where: { tenantId } });
 
     if (config && config.encryptedApiKey && config.encryptedSecret) {
       try {
@@ -36,7 +29,7 @@ export class PaymentService {
           isLive: config.isLive,
         });
       } catch (e) {
-        console.error('Failed to decrypt payment credentials, checking master gateway:', e);
+        console.error('Failed to decrypt payment credentials:', e);
       }
     }
 
@@ -53,11 +46,6 @@ export class PaymentService {
     return new AzamPayGateway();
   }
 
-  /**
-   * Determines whether this tenant is managed by an external RADIUS server
-   * (universal cross-brand compatibility via FreeRADIUS) or via a native
-   * router adapter (MikroTik direct API).
-   */
   private static async getAccessModeForTenant(tenantId: string): Promise<PaymentAccessMode> {
     const radiusNas = await prisma.radiusNas.findFirst({
       where: { tenantId, isActive: true },
@@ -72,13 +60,8 @@ export class PaymentService {
       include: { tenant: true },
     });
 
-    if (!pkg) {
-      throw new Error('Selected Wi-Fi package not found');
-    }
-
-    if (pkg.tenantId !== req.tenantId) {
-      throw new Error('Package does not belong to this operator');
-    }
+    if (!pkg) throw new Error('Selected Wi-Fi package not found');
+    if (pkg.tenantId !== req.tenantId) throw new Error('Package does not belong to this operator');
 
     const gateway = await this.getGatewayForTenant(req.tenantId);
     const formattedPhone = gateway.formatTzPhone(req.phoneNumber);
@@ -104,69 +87,39 @@ export class PaymentService {
     });
 
     const checkoutResult = await gateway.initiateMnoCheckout({
-      reference,
-      amount: pkg.priceTzs,
-      phone: formattedPhone,
-      provider: req.provider,
+      reference, amount: pkg.priceTzs, phone: formattedPhone, provider: req.provider,
     });
 
     if (!checkoutResult.success) {
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: { status: 'FAILED' },
-      });
+      await prisma.payment.update({ where: { id: payment.id }, data: { status: 'FAILED' } });
       throw new Error(checkoutResult.message || 'Payment initiation failed');
     }
 
     if (checkoutResult.externalId) {
-      await prisma.payment.update({
-        where: { id: payment.id },
-        data: { externalId: checkoutResult.externalId },
-      });
+      await prisma.payment.update({ where: { id: payment.id }, data: { externalId: checkoutResult.externalId } });
     }
 
     return {
-      paymentId: payment.id,
-      reference,
-      status: 'PENDING',
-      amount: pkg.priceTzs,
-      provider: req.provider,
-      phoneNumber: formattedPhone,
-      message: checkoutResult.message,
-      accessToken,
+      paymentId: payment.id, reference, status: 'PENDING', amount: pkg.priceTzs,
+      provider: req.provider, phoneNumber: formattedPhone, message: checkoutResult.message, accessToken,
     };
   }
 
-  static async fulfillPayment(
-    reference: string,
-    externalId?: string,
-    expectedAmount?: number
-  ): Promise<{
-    payment: any;
-    voucher: any;
-    rawCode: string;
-    accessMode: PaymentAccessMode;
+  static async fulfillPayment(reference: string, externalId?: string, expectedAmount?: number): Promise<{
+    payment: any; voucher: any; rawCode: string; accessMode: PaymentAccessMode;
   }> {
     const payment = await prisma.payment.findUnique({
       where: { reference },
-      include: {
-        package: true,
-        tenant: true,
-        voucher: true,
-      },
+      include: { package: true, tenant: true, voucher: true },
     });
 
-    if (!payment) {
-      throw new Error(`Payment with reference '${reference}' not found`);
-    }
-
+    if (!payment) throw new Error(`Payment with reference '${reference}' not found`);
     if (expectedAmount !== undefined && expectedAmount !== payment.amount) {
       throw new Error('Webhook amount does not match the expected payment amount');
     }
 
     const accessMode = await this.getAccessModeForTenant(payment.tenantId);
 
-    // Idempotent: if already SUCCESS with voucher, return existing record.
     if (payment.status === 'SUCCESS' && payment.voucher) {
       const rawCode = decryptSecret(payment.voucher.encryptedCode);
       return { payment, voucher: payment.voucher, rawCode, accessMode };
@@ -186,101 +139,63 @@ export class PaymentService {
     const result = await prisma.$transaction(async (tx) => {
       const claimed = await tx.payment.updateMany({
         where: { id: payment.id, status: 'PENDING' },
-        data: {
-          status: 'SUCCESS',
-          externalId: externalId || payment.externalId,
-          completedAt: now,
-        },
+        data: { status: 'SUCCESS', externalId: externalId || payment.externalId, completedAt: now },
       });
 
       if (claimed.count !== 1) {
-        const current = await tx.payment.findUnique({
-          where: { id: payment.id },
-          include: { voucher: true },
-        });
-        if (current?.status === 'SUCCESS' && current.voucher) {
-          return { payment: current, voucher: current.voucher };
-        }
+        const current = await tx.payment.findUnique({ where: { id: payment.id }, include: { voucher: true } });
+        if (current?.status === 'SUCCESS' && current.voucher) return { payment: current, voucher: current.voucher };
         throw new Error('Payment was already processed by another request');
       }
 
-      // RADIUS tenants: create voucher in UNUSED state. The FreeRADIUS
-      // server activates it on first Access-Request (radius.ts `/authorize`),
-      // setting activatedAt and expiresAt at that moment.
-      //
-      // NATIVE tenants: current behavior — activate immediately and set expiry
-      // because the router adapter provisions the user right away.
       const voucher = await tx.voucher.create({
-        data:
-          accessMode === 'RADIUS'
-            ? {
-                batchId,
-                tenantId: payment.tenantId,
-                packageId: payment.packageId,
-                codeHash,
-                encryptedCode,
-                status: 'UNUSED',
-                usedByIp: payment.phoneNumber,
-              }
-            : {
-                batchId,
-                tenantId: payment.tenantId,
-                packageId: payment.packageId,
-                codeHash,
-                encryptedCode,
-                status: 'ACTIVE',
-                activatedAt: now,
-                expiresAt,
-                usedByIp: payment.phoneNumber,
-              },
+        data: accessMode === 'RADIUS' ? {
+            batchId, tenantId: payment.tenantId, packageId: payment.packageId,
+            codeHash, encryptedCode, status: 'UNUSED', usedByIp: payment.phoneNumber,
+          } : {
+            batchId, tenantId: payment.tenantId, packageId: payment.packageId,
+            codeHash, encryptedCode, status: 'ACTIVE', activatedAt: now, expiresAt, usedByIp: payment.phoneNumber,
+          },
       });
 
       const updatedPayment = await tx.payment.update({
-        where: { id: payment.id },
-        data: { voucherId: voucher.id },
+        where: { id: payment.id }, data: { voucherId: voucher.id },
       });
 
       return { payment: updatedPayment, voucher };
     });
 
-    // Native router provisioning (skipped for RADIUS tenants — the NAS handles
-    // authentication against the RADIUS server directly).
     if (accessMode === 'NATIVE') {
-      try {
-        const routerDevice = await prisma.router.findFirst({
-          where: { tenantId: payment.tenantId, status: 'ONLINE' },
-        });
+      const prov = await this.provisionVoucherOnRouter({
+        tenantId: payment.tenantId,
+        routerId: payment.package.routerId,
+        rawCode,
+        durationMinutes: payment.package.durationMinutes,
+        downloadKbps: payment.package.downloadKbps,
+        uploadKbps: payment.package.uploadKbps,
+        phoneNumber: payment.phoneNumber,
+      });
 
-        if (routerDevice) {
-          const routerPassword = decryptSecret(routerDevice.encryptedPassword);
-          const adapter = RouterAdapterFactory.getAdapter(routerDevice.vendor, {
-            host: routerDevice.host,
-            port: routerDevice.apiPort,
-            username: routerDevice.username,
-            password: routerPassword,
-          });
-
-          await adapter.provisionUser({
-            username: rawCode,
-            password: rawCode,
-            durationMinutes: payment.package.durationMinutes,
-            downloadKbps: payment.package.downloadKbps,
-            uploadKbps: payment.package.uploadKbps,
-            comment: `PoaFi Pay: ${payment.phoneNumber}`,
-          });
-        }
-      } catch (routerErr) {
-        console.error('Auto-provision on router failed after payment:', routerErr);
+      const meta = this.parseMetadata(payment.metadata);
+      await prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          metadata: JSON.stringify(
+            prov.provisioned
+              ? { ...meta, provisionedOnRouter: true, provisionedAt: new Date().toISOString(), provisionAttempts: 1 }
+              : { ...meta, provisionedOnRouter: false, provisionError: prov.error, provisionAttempts: 1 },
+          ),
+        },
+      });
+      if (!prov.provisioned) {
+        console.warn(`[PaymentService] Auto-provision deferred for payment ${payment.reference}: ${prov.error}`);
       }
     }
 
     try {
       await SmsService.sendVoucherReceipt({
-        phone: payment.phoneNumber,
-        voucherCode: rawCode,
-        packageName: payment.package.name,
-        durationMinutes: payment.package.durationMinutes,
-        priceTzs: payment.amount,
+        phone: payment.phoneNumber, voucherCode: rawCode, packageName: payment.package.name,
+        durationMinutes: payment.package.durationMinutes, priceTzs: payment.amount,
       });
     } catch (smsErr) {
       console.error('Failed to dispatch SMS receipt:', smsErr);
@@ -291,14 +206,35 @@ export class PaymentService {
 
   static async handleWebhook(
     payload: any,
-    signature?: string
+    signature?: string,
+    rawBody?: Buffer | string,
   ): Promise<{ success: boolean; message: string }> {
-    const gateway = new AzamPayGateway();
-    const result: WebhookResult = gateway.verifyWebhook(payload, signature);
+    const candidateRef = String(payload?.utilityref || payload?.externalId || payload?.reference || '').trim();
+    let tenantSecret: string | undefined;
 
-    if (!result.reference) {
-      throw new Error('Webhook missing payment reference');
+    if (candidateRef) {
+      const payment = await prisma.payment.findUnique({
+        where: { reference: candidateRef },
+        select: { tenantId: true },
+      });
+      if (payment) {
+        const cfg = await prisma.paymentConfig.findUnique({
+          where: { tenantId: payment.tenantId },
+          select: { webhookSecret: true },
+        });
+        tenantSecret = cfg?.webhookSecret || undefined;
+      }
     }
+
+    const webhookSecret = tenantSecret || env.AZAMPAY_WEBHOOK_SECRET;
+    if (!webhookSecret) {
+      throw new WebhookNotConfiguredError('Payment callback verification is not configured');
+    }
+
+    const gateway = new AzamPayGateway({ webhookSecret });
+    const result: WebhookResult = gateway.verifyWebhook(payload, signature, { webhookSecret, rawBody });
+
+    if (!result.reference) throw new Error('Webhook missing payment reference');
 
     if (result.status === 'SUCCESS') {
       await this.fulfillPayment(result.reference, result.externalId, result.amount);
@@ -307,10 +243,7 @@ export class PaymentService {
 
     await prisma.payment.updateMany({
       where: { reference: result.reference, status: 'PENDING' },
-      data: {
-        status: 'FAILED',
-        externalId: result.externalId,
-      },
+      data: { status: 'FAILED', externalId: result.externalId },
     });
     return { success: true, message: 'Payment marked as failed' };
   }
@@ -319,49 +252,167 @@ export class PaymentService {
     const tokenHash = this.hashAccessToken(accessToken);
     const payment = await prisma.payment.findFirst({
       where: { id: paymentId, accessTokenHash: tokenHash },
-      include: {
-        package: { select: { name: true, durationMinutes: true, downloadKbps: true, uploadKbps: true } },
-        voucher: true,
-      },
+      include: { package: { select: { name: true, durationMinutes: true } }, voucher: true },
     });
 
-    if (!payment) {
-      throw new Error('Payment not found');
-    }
+    if (!payment) throw new Error('Payment not found');
 
     let voucherCode: string | null = null;
-    if (payment.voucher) {
-      voucherCode = decryptSecret(payment.voucher.encryptedCode);
-    }
+    if (payment.voucher) voucherCode = decryptSecret(payment.voucher.encryptedCode);
 
     const accessMode = await this.getAccessModeForTenant(payment.tenantId);
 
     return {
-      paymentId: payment.id,
-      reference: payment.reference,
-      status: payment.status,
-      amount: payment.amount,
-      currency: payment.currency,
-      provider: payment.provider,
-      packageName: payment.package.name,
-      durationMinutes: payment.package.durationMinutes,
-      voucherCode,
-      accessMode,
-      voucherStatus: payment.voucher?.status ?? null,
-      activatedAt: payment.voucher?.activatedAt,
-      expiresAt: payment.voucher?.expiresAt,
+      paymentId: payment.id, reference: payment.reference, status: payment.status,
+      amount: payment.amount, currency: payment.currency, provider: payment.provider,
+      packageName: payment.package.name, durationMinutes: payment.package.durationMinutes,
+      voucherCode, accessMode, voucherStatus: payment.voucher?.status ?? null,
+      activatedAt: payment.voucher?.activatedAt, expiresAt: payment.voucher?.expiresAt,
     };
   }
 
-  static async simulateConfirmation(paymentId: string) {
-    const payment = await prisma.payment.findUnique({
-      where: { id: paymentId },
+  private static parseMetadata(raw?: string | null): Record<string, any> {
+    if (!raw) return {};
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === 'object' ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+
+  /**
+   * Push a paid voucher user onto the target ONLINE router.
+   * Returns `{ provisioned: true }` on success or `{ provisioned: false, error }` so callers can queue recovery.
+   */
+  private static async provisionVoucherOnRouter(params: {
+    tenantId: string;
+    routerId?: string | null;
+    rawCode: string;
+    durationMinutes: number;
+    downloadKbps: number;
+    uploadKbps: number;
+    phoneNumber: string;
+  }): Promise<{ provisioned: boolean; error?: string }> {
+    const routerDevice = await prisma.router.findFirst({
+      where: {
+        tenantId: params.tenantId,
+        status: 'ONLINE',
+        ...(params.routerId ? { id: params.routerId } : {}),
+      },
     });
 
-    if (!payment) {
-      throw new Error('Payment not found');
+    if (!routerDevice) {
+      return { provisioned: false, error: 'No ONLINE router available' };
     }
 
+    try {
+      const routerPassword = decryptSecret(routerDevice.encryptedPassword);
+      const adapter = RouterAdapterFactory.getAdapter(routerDevice.vendor, {
+        host: routerDevice.host,
+        port: routerDevice.apiPort,
+        username: routerDevice.username,
+        password: routerPassword,
+      });
+
+      await adapter.provisionUser({
+        username: params.rawCode,
+        password: params.rawCode,
+        durationMinutes: params.durationMinutes,
+        downloadKbps: params.downloadKbps,
+        uploadKbps: params.uploadKbps,
+        comment: `PoaFi Pay: ${params.phoneNumber}`,
+      });
+      return { provisioned: true };
+    } catch (err: any) {
+      return { provisioned: false, error: err?.message || 'Router provisioning failed' };
+    }
+  }
+
+  /**
+   * Background recovery job: retries router provisioning for recent NATIVE-mode
+   * SUCCESS payments whose initial router push failed (e.g. brief link drop).
+   */
+  static async retryPendingProvisions(): Promise<{ retried: number; succeeded: number }> {
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const candidates = await prisma.payment.findMany({
+      where: {
+        status: 'SUCCESS',
+        completedAt: { gte: cutoff },
+        metadata: { contains: '"provisionedOnRouter":false' },
+        voucherId: { not: null },
+      },
+      include: { package: true, voucher: true },
+      take: 25,
+    });
+
+    let retried = 0;
+    let succeeded = 0;
+
+    for (const p of candidates) {
+      if (!p.voucher) continue;
+      if (p.voucher.expiresAt && p.voucher.expiresAt <= new Date()) continue;
+
+      const meta = this.parseMetadata(p.metadata);
+      const attempts = Number(meta.provisionAttempts || 0);
+      if (attempts >= 5) continue;
+
+      const mode = await this.getAccessModeForTenant(p.tenantId);
+      if (mode === 'RADIUS') {
+        await prisma.payment.update({
+          where: { id: p.id },
+          data: { metadata: JSON.stringify({ ...meta, provisionedOnRouter: true, mode: 'RADIUS' }) },
+        });
+        continue;
+      }
+
+      retried++;
+      const rawCode = decryptSecret(p.voucher.encryptedCode);
+      const res = await this.provisionVoucherOnRouter({
+        tenantId: p.tenantId,
+        routerId: p.package.routerId,
+        rawCode,
+        durationMinutes: p.package.durationMinutes,
+        downloadKbps: p.package.downloadKbps,
+        uploadKbps: p.package.uploadKbps,
+        phoneNumber: p.phoneNumber,
+      });
+
+      if (res.provisioned) {
+        succeeded++;
+        await prisma.payment.update({
+          where: { id: p.id },
+          data: {
+            metadata: JSON.stringify({
+              ...meta,
+              provisionedOnRouter: true,
+              provisionError: null,
+              provisionAttempts: attempts + 1,
+              provisionedAt: new Date().toISOString(),
+            }),
+          },
+        });
+      } else {
+        await prisma.payment.update({
+          where: { id: p.id },
+          data: {
+            metadata: JSON.stringify({
+              ...meta,
+              provisionedOnRouter: false,
+              provisionError: res.error,
+              provisionAttempts: attempts + 1,
+            }),
+          },
+        });
+      }
+    }
+
+    return { retried, succeeded };
+  }
+
+  static async simulateConfirmation(paymentId: string) {
+    const payment = await prisma.payment.findUnique({ where: { id: paymentId } });
+    if (!payment) throw new Error('Payment not found');
     return this.fulfillPayment(payment.reference, `SIM-CONFIRM-${Date.now()}`);
   }
 }

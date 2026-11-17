@@ -23,10 +23,17 @@ export const createTenantLoginSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
+const optionalUuid = z.preprocess(
+  (v) => (v === '' ? null : v),
+  z.string().uuid('Invalid UUID').optional().nullable()
+);
+
 // Routers
 export const createRouterSchema = z.object({
-  tenantId: z.string().uuid('Invalid tenant ID').optional(),
-  deviceModelId: z.string().uuid('Invalid device model ID').optional().nullable(),
+  tenantId: optionalUuid,
+  siteId: optionalUuid,
+  setupRequestId: optionalUuid,
+  deviceModelId: optionalUuid,
   siteName: z.string().max(120).optional().nullable(),
   installationAddress: z.string().max(500).optional().nullable(),
   connectionMode: z.enum(['DIRECT', 'VPN', 'SECURE_TUNNEL', 'CLOUD_CONTROLLER']).default('DIRECT'),
@@ -40,7 +47,8 @@ export const createRouterSchema = z.object({
 });
 
 export const updateRouterSchema = z.object({
-  deviceModelId: z.string().uuid('Invalid device model ID').optional().nullable(),
+  siteId: optionalUuid,
+  deviceModelId: optionalUuid,
   siteName: z.string().max(120).optional().nullable(),
   installationAddress: z.string().max(500).optional().nullable(),
   connectionMode: z.enum(['DIRECT', 'VPN', 'SECURE_TUNNEL', 'CLOUD_CONTROLLER']).optional(),

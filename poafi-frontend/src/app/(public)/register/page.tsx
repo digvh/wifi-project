@@ -8,12 +8,16 @@ import {
   Mail, 
   Phone, 
   MapPin, 
+  Lock,
+  Eye,
+  EyeOff,
   Send, 
   CheckCircle, 
   Sparkles, 
   ShieldCheck, 
   ArrowRight,
-  BookOpen
+  BookOpen,
+  KeyRound
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useLanguage } from "@/context/LanguageContext";
@@ -27,9 +31,12 @@ export default function OperatorRegisterPage() {
     email: "",
     phone: "",
     city: "",
+    password: "",
+    confirmPassword: "",
     message: "",
   });
 
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
@@ -37,12 +44,39 @@ export default function OperatorRegisterPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+
+    if (formData.password.length < 8) {
+      setError(
+        lang === "sw" 
+          ? "Nenosiri lazima liwe na angalau herufi 8." 
+          : "Password must be at least 8 characters long."
+      );
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError(
+        lang === "sw" 
+          ? "Manenosiri hayafanani. Tafadhali hakiki tena." 
+          : "Passwords do not match. Please re-enter."
+      );
+      return;
+    }
+
     setLoading(true);
 
     try {
       await apiFetch("/applications", {
         method: "POST",
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          businessName: formData.businessName,
+          contactName: formData.contactName,
+          email: formData.email,
+          phone: formData.phone,
+          city: formData.city,
+          password: formData.password,
+          message: formData.message,
+        }),
       });
 
       setSuccess(true);
@@ -94,8 +128,8 @@ export default function OperatorRegisterPage() {
         </h1>
         <p className="text-xs sm:text-sm text-gray-400 max-w-2xl mx-auto leading-relaxed">
           {lang === "sw"
-            ? "Tuma ombi lako la kujiunga na jukwaa letu ili uweze kusanidi routers zako, kuuza vifurushi kwa njia ya kidijitali na kupokea 90% ya mapato yako kiotomatiki."
-            : "Apply for your tenant account to connect routers, automate M-Pesa voucher sales, and collect 90% direct payouts with zero upfront platform cost."}
+            ? "Tengeneza nenosiri lako mwenyewe litakalotumika kuingia kwenye jukwaa lako. Taarifa zako za eneo na biashara zitajazwa moja kwa moja bila kuhitaji kuandika upya."
+            : "Create your own password to log in to your dashboard. Your business & location details will automatically set up your initial site with zero duplicate typing."}
         </p>
       </div>
 
@@ -108,21 +142,19 @@ export default function OperatorRegisterPage() {
           <div className="space-y-2">
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white">
               {lang === "sw"
-                ? "Hongera! Ombi Lako Limepokelewa Kikamilifu."
-                : "Congratulations! Application Submitted Successfully."}
+                ? "Hongera! Ombi na Nenosiri Lako Vimerekodiwa."
+                : "Congratulations! Application & Password Saved."}
             </h2>
             <p className="text-xs sm:text-sm text-gray-300 max-w-lg mx-auto leading-relaxed">
               {lang === "sw" ? (
                 <>
-                  Timu yetu ya usimamizi imepokea ombi la biashara yako ya{" "}
-                  <strong className="text-[#00f3ff]">{formData.businessName}</strong>. Tutawasiliana nawe ndani ya saa
-                  24 kupitia namba ya simu au barua pepe uliyoweka.
+                  Ombi la biashara ya <strong className="text-[#00f3ff]">{formData.businessName}</strong> limepokelewa.
+                  Nenosiri uliloweka litatumika kuingia moja kwa moja kwenye akaunti yako punde itakapothibitishwa!
                 </>
               ) : (
                 <>
-                  Our platform administration team has received your request for{" "}
-                  <strong className="text-[#00f3ff]">{formData.businessName}</strong>. We will review and contact you
-                  within 24 hours to activate your credentials.
+                  Application for <strong className="text-[#00f3ff]">{formData.businessName}</strong> received.
+                  Your password has been saved securely — you will sign in using it immediately upon activation!
                 </>
               )}
             </p>
@@ -130,37 +162,35 @@ export default function OperatorRegisterPage() {
 
           <div className="p-4 bg-black/40 border border-white/10 rounded-2xl max-w-md mx-auto text-left text-xs space-y-2">
             <div className="flex justify-between text-gray-400">
-              <span>{lang === "sw" ? "Barua Pepe:" : "Email:"}</span>
+              <span>{lang === "sw" ? "Barua Pepe ya Kuingilia:" : "Login Email:"}</span>
               <span className="text-white font-mono">{formData.email}</span>
             </div>
             <div className="flex justify-between text-gray-400">
-              <span>{lang === "sw" ? "Namba ya Simu:" : "Phone:"}</span>
-              <span className="text-white font-mono">{formData.phone}</span>
+              <span>{lang === "sw" ? "Nenosiri:" : "Password:"}</span>
+              <span className="text-green-400 font-mono">•••••••• (Uliyoweka / Yours)</span>
             </div>
             <div className="flex justify-between text-gray-400">
-              <span>{lang === "sw" ? "Mkoa / Eneo:" : "City / Region:"}</span>
-              <span className="text-white">{formData.city}</span>
+              <span>{lang === "sw" ? "Eneo la Mwanzo (Site):" : "Initial Location (Site):"}</span>
+              <span className="text-[#00f3ff]">{formData.city}</span>
             </div>
           </div>
 
           <div className="pt-4 flex flex-col sm:flex-row items-center justify-center gap-3">
             <Link
+              href="/login"
+              className="px-6 py-3 bg-gradient-to-r from-[#00f3ff] to-[#9d00ff] text-white font-bold rounded-xl text-xs transition-opacity hover:opacity-90 flex items-center gap-2"
+            >
+              <span>{lang === "sw" ? "Nenda Kwenye Ukurasa wa Kuingia (Login)" : "Go to Sign In Page"}</span>
+              <ArrowRight size={14} />
+            </Link>
+
+            <Link
               href="/guide"
               className="px-6 py-3 bg-white/10 hover:bg-white/15 border border-white/20 text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-2"
             >
               <BookOpen size={16} />
-              <span>{lang === "sw" ? "Soma Mwongozo wa Router" : "Read Router Guide in the Meantime"}</span>
+              <span>{lang === "sw" ? "Soma Mwongozo wa Router" : "Read Router Guide"}</span>
             </Link>
-
-            <a
-              href="https://wa.me/255754000000?text=Habari%20PoaFi,%20nimetuma%20ombi%20la%20kujiunga%20kama%20operator."
-              target="_blank"
-              rel="noopener noreferrer"
-              className="px-6 py-3 bg-[#25D366] hover:bg-[#20ba59] text-white font-bold rounded-xl text-xs transition-colors flex items-center gap-2"
-            >
-              <span>{lang === "sw" ? "Uanzishwaji wa Haraka (WhatsApp)" : "Instant Fast-Track (WhatsApp)"}</span>
-              <ArrowRight size={14} />
-            </a>
           </div>
         </div>
       ) : (
@@ -170,37 +200,37 @@ export default function OperatorRegisterPage() {
             <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-4">
               <h3 className="text-base font-bold text-white flex items-center gap-2">
                 <ShieldCheck className="text-[#00f3ff]" size={18} />
-                <span>{lang === "sw" ? "Nini Kinafuata Baada ya Kutuma?" : "What Happens Next?"}</span>
+                <span>{lang === "sw" ? "Faida za Kujiandikisha" : "Zero-Effort Setup"}</span>
               </h3>
               <ul className="space-y-3 text-xs text-gray-400 leading-relaxed">
                 <li className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-white/10 text-white font-bold flex items-center justify-center shrink-0 mt-0.5 text-[10px]">
-                    1
+                  <span className="w-5 h-5 rounded-full bg-[#00f3ff]/20 text-[#00f3ff] font-bold flex items-center justify-center shrink-0 mt-0.5 text-[10px]">
+                    ✓
                   </span>
                   <span>
                     {lang === "sw"
-                      ? "Super Admin anapitia maelezo yako na kuthibitisha eneo lako."
-                      : "Admin reviews your hotspot location & contact profile."}
+                      ? "Unatengeneza nenosiri lako sasa — hakuna nenosiri la muda au kubahatisha."
+                      : "Create your own secure password now — no temporary passwords."}
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-white/10 text-white font-bold flex items-center justify-center shrink-0 mt-0.5 text-[10px]">
-                    2
+                  <span className="w-5 h-5 rounded-full bg-[#00f3ff]/20 text-[#00f3ff] font-bold flex items-center justify-center shrink-0 mt-0.5 text-[10px]">
+                    ✓
                   </span>
                   <span>
                     {lang === "sw"
-                      ? "Unatengenezewa akaunti ya Operator Workspace na kutumiwa nenosiri."
-                      : "Your dedicated tenant workspace & login are provisioned."}
+                      ? "Eneo lako na jina la biashara vitatengeneza Site yako ya kwanza kiotomatiki."
+                      : "Your city & business name automatically initialize your primary Site."}
                   </span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <span className="w-5 h-5 rounded-full bg-white/10 text-white font-bold flex items-center justify-center shrink-0 mt-0.5 text-[10px]">
-                    3
+                  <span className="w-5 h-5 rounded-full bg-[#00f3ff]/20 text-[#00f3ff] font-bold flex items-center justify-center shrink-0 mt-0.5 text-[10px]">
+                    ✓
                   </span>
                   <span>
                     {lang === "sw"
-                      ? "Unaunganisha router yako na kuanza kuuza intaneti mara moja!"
-                      : "Connect your router and start collecting Wi-Fi revenue!"}
+                      ? "Unganisha MikroTik, Omada, au UniFi na upokee 90% ya mapato yako ya intaneti moja kwa moja."
+                      : "Connect MikroTik, Omada or UniFi and collect 90% net revenue directly."}
                   </span>
                 </li>
               </ul>
@@ -208,7 +238,7 @@ export default function OperatorRegisterPage() {
 
             <div className="glass-panel p-6 rounded-2xl border border-white/10 space-y-2">
               <p className="text-xs text-gray-300 font-medium">
-                {lang === "sw" ? "Tayari unayo akaunti iliyothibitishwa?" : "Already have an approved account?"}
+                {lang === "sw" ? "Tayari unayo akaunti iliyothibitishwa?" : "Already have an account?"}
               </p>
               <Link
                 href="/login"
@@ -222,12 +252,12 @@ export default function OperatorRegisterPage() {
           {/* Right Column: Application Form */}
           <div className="glass-panel p-8 sm:p-10 rounded-3xl border border-white/10 lg:col-span-2">
             <h2 className="text-xl font-bold text-white mb-2">
-              {lang === "sw" ? "Taarifa za Biashara Yako" : "Business & Location Details"}
+              {lang === "sw" ? "Taarifa za Biashara & Nenosiri" : "Business Details & Password"}
             </h2>
             <p className="text-xs text-gray-400 mb-6">
               {lang === "sw"
-                ? "Tafadhali jaza taarifa sahihi ili tuweze kuwasiliana nawe kwa urahisi."
-                : "Please provide accurate contact info so our team can approve your workspace."}
+                ? "Weka taarifa zako na nenosiri lako la siri utakolotumia kuingia kwenye akaunti yako."
+                : "Enter your contact info and personal password to access your operator dashboard."}
             </p>
 
             {error && (
@@ -293,7 +323,7 @@ export default function OperatorRegisterPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-xs font-semibold text-gray-300 mb-1.5">
-                    {lang === "sw" ? "Barua Pepe *" : "Email Address *"}
+                    {lang === "sw" ? "Barua Pepe (Email ya Kuingilia) *" : "Email Address (Login ID) *"}
                   </label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-3 w-4 h-4 text-gray-500" />
@@ -310,7 +340,7 @@ export default function OperatorRegisterPage() {
 
                 <div>
                   <label className="block text-xs font-semibold text-gray-300 mb-1.5">
-                    {lang === "sw" ? "Mkoa & Wilaya *" : "City & District *"}
+                    {lang === "sw" ? "Mkoa & Wilaya (Eneo la Kwanza / Site) *" : "City & District (Primary Site) *"}
                   </label>
                   <div className="relative">
                     <MapPin className="absolute left-3.5 top-3 w-4 h-4 text-gray-500" />
@@ -326,6 +356,68 @@ export default function OperatorRegisterPage() {
                 </div>
               </div>
 
+              {/* Operator's Own Password Fields */}
+              <div className="p-4 bg-white/5 border border-white/10 rounded-2xl space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-[#00f3ff]">
+                  <KeyRound size={16} />
+                  <span>{lang === "sw" ? "Tengeneza Nenosiri Lako la Kuingilia" : "Create Your Login Password"}</span>
+                </div>
+                <p className="text-[11px] text-gray-400">
+                  {lang === "sw"
+                    ? "Hili ndilo nenosiri utakolotumia kuingia kwenye dashboard yako. Lihifadhi vizuri."
+                    : "This password will be used to log in to your operator workspace. Minimum 8 characters."}
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-300 mb-1">
+                      {lang === "sw" ? "Nenosiri *" : "Password *"}
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-3 w-4 h-4 text-gray-500" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        required
+                        minLength={8}
+                        value={formData.password}
+                        onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                        className="w-full bg-black/40 border border-white/10 rounded-xl pl-10 pr-10 py-2.5 text-xs text-white focus:outline-none focus:border-[#00f3ff]"
+                        placeholder="••••••••"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-3 top-3 text-gray-400 hover:text-white"
+                      >
+                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-gray-300 mb-1">
+                      {lang === "sw" ? "Thibitisha Nenosiri *" : "Confirm Password *"}
+                    </label>
+                    <div className="relative">
+                      <Lock className="absolute left-3.5 top-3 w-4 h-4 text-gray-500" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        required
+                        minLength={8}
+                        value={formData.confirmPassword}
+                        onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
+                        className={`w-full bg-black/40 border rounded-xl pl-10 pr-4 py-2.5 text-xs text-white focus:outline-none ${
+                          formData.confirmPassword && formData.password !== formData.confirmPassword
+                            ? "border-red-500"
+                            : "border-white/10 focus:border-[#00f3ff]"
+                        }`}
+                        placeholder="••••••••"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-semibold text-gray-300 mb-1.5">
                   {lang === "sw"
@@ -333,7 +425,7 @@ export default function OperatorRegisterPage() {
                     : "Router Model / Extra Notes (Optional)"}
                 </label>
                 <textarea
-                  rows={3}
+                  rows={2}
                   value={formData.message}
                   onChange={(e) => setFormData({ ...formData, message: e.target.value })}
                   className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-[#00f3ff] resize-none"
@@ -355,7 +447,7 @@ export default function OperatorRegisterPage() {
                 ) : (
                   <>
                     <Send size={16} />
-                    <span>{lang === "sw" ? "Tuma Ombi la Kujiunga" : "Submit Operator Application"}</span>
+                    <span>{lang === "sw" ? "Tuma Ombi la Kujiunga" : "Submit Operator Registration"}</span>
                   </>
                 )}
               </button>

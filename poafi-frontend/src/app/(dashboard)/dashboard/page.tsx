@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   AreaChart,
@@ -21,6 +22,8 @@ import {
   Users,
   CheckCircle2,
   AlertTriangle,
+  Truck,
+  MapPin,
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
@@ -29,35 +32,63 @@ export default function Dashboard() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [overview, setOverview] = useState({
+  const [overview, setOverview] = useState<{
+    activeSessions: number;
+    totalRevenueTzs: number;
+    todayRevenueTzs: number;
+    monthRevenueTzs?: number;
+    successfulTransactions: number;
+    todayTransactions: number;
+    monthTransactions?: number;
+    vouchers: { total: number; active: number; unused: number; usedOrExpired: number };
+    routers: { total: number; online: number; offline: number };
+    sitesSummary?: { id: string; name: string; address?: string | null; totalRouters: number; onlineRouters: number }[];
+    tenantsCount: number;
+  }>({
     activeSessions: 0,
     totalRevenueTzs: 0,
     todayRevenueTzs: 0,
+    monthRevenueTzs: 0,
     successfulTransactions: 0,
     todayTransactions: 0,
+    monthTransactions: 0,
     vouchers: { total: 0, active: 0, unused: 0, usedOrExpired: 0 },
     routers: { total: 0, online: 0, offline: 0 },
+    sitesSummary: [],
     tenantsCount: 1,
   });
   const [chartData, setChartData] = useState<any[]>([]);
   const [routers, setRouters] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
+  const [setupAlerts, setSetupAlerts] = useState<any[]>([]);
   const [error, setError] = useState("");
 
   const fetchDashboardData = async (isManual = false) => {
     if (isManual) setRefreshing(true);
     try {
-      const [overviewData, chartRes, routersRes, packagesRes] = await Promise.all([
+      const calls: Promise<any>[] = [
         apiFetch("/stats/overview"),
         apiFetch("/stats/revenue-chart"),
         apiFetch("/stats/routers-health"),
         apiFetch("/stats/popular-packages"),
-      ]);
+      ];
+      if (user?.role !== "PLATFORM_ADMIN") {
+        calls.push(apiFetch("/device-setup").catch(() => ({ requests: [] })));
+      }
+
+      const [overviewData, chartRes, routersRes, packagesRes, setupRes] = await Promise.all(calls);
 
       setOverview(overviewData);
       setChartData(chartRes.chartData || []);
       setRouters(routersRes.routers || []);
       setPackages(packagesRes.packages || []);
+      if (setupRes?.requests) {
+        setSetupAlerts(
+          setupRes.requests.filter((r: any) =>
+            ["DEVICE_RECEIVED", "IN_PROGRESS", "CONFIGURED", "SHIPPED_BACK"].includes(r.status),
+          ),
+        );
+      }
       setError("");
     } catch (err: any) {
       console.error("Dashboard fetch error:", err);
@@ -127,6 +158,41 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* Operator device setup status notifications */}
+      {setupAlerts.length > 0 && (
+        <div className="space-y-2">
+          {setupAlerts.slice(0, 2).map((req) => (
+            <div
+              key={req.id}
+              className="p-4 rounded-xl bg-[#00f3ff]/10 border border-[#00f3ff]/30 text-white text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2"
+            >
+              <div className="flex items-center gap-3">
+                <Truck className="text-[#00f3ff] shrink-0" size={18} />
+                <div>
+                  <p className="font-bold">
+                    {req.deviceName || "Your Router"} —{" "}
+                    {req.status === "SHIPPED_BACK"
+                      ? "Kimetumwa Kwako! / Shipped back to you"
+                      : req.status === "CONFIGURED"
+                        ? "Kimesanidiwa! / Configured and ready for delivery"
+                        : req.status === "DEVICE_RECEIVED"
+                          ? "Kimepokelewa na PoaFi / Device received by admin"
+                          : "Kinashughulikiwa / Configuration in progress"}
+                  </p>
+                  {req.adminNotes && <p className="text-gray-300 mt-0.5">{req.adminNotes}</p>}
+                </div>
+              </div>
+              <Link
+                href="/device-setup"
+                className="text-[#00f3ff] font-bold hover:underline shrink-0"
+              >
+                View Setup Status →
+              </Link>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* KPI Stats Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Active Sessions */}
@@ -190,6 +256,9 @@ export default function Dashboard() {
               </h2>
               <p className="text-[11px] text-green-400 mt-1 flex items-center gap-1">
                 <TrendingUp size={12} /> {overview.successfulTransactions} paid orders
+              </p>
+              <p className="text-[11px] text-gray-400 mt-0.5">
+                This month: <span className="text-white font-semibold">TZS {(overview.monthRevenueTzs || 0).toLocaleString()}</span> ({overview.monthTransactions || 0})
               </p>
             </div>
             <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400">
@@ -346,9 +415,24 @@ export default function Dashboard() {
             </div>
           </div>
 
-          <div className="pt-4 border-t border-white/10 mt-4 text-[11px] text-gray-400 flex justify-between items-center">
-            <span>Gateway Engine: Multi-Brand v2</span>
-            <span className="text-[#00f3ff] font-mono">6 Brands Supported</span>
+          <div className="pt-4 border-t border-white/10 mt-4 space-y-2">
+            {(overview.sitesSummary && overview.sitesSummary.length > 0) && (
+              <div className="flex flex-wrap gap-1.5">
+                {overview.sitesSummary.map((s) => (
+                  <span
+                    key={s.id}
+                    className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-gray-300 flex items-center gap-1"
+                  >
+                    <MapPin size={10} className="text-[#00f3ff]" />
+                    {s.name}: <strong className="text-white">{s.onlineRouters}/{s.totalRouters}</strong> online
+                  </span>
+                ))}
+              </div>
+            )}
+            <div className="text-[11px] text-gray-400 flex justify-between items-center">
+              <span>Gateway Engine: Multi-Brand v2</span>
+              <span className="text-[#00f3ff] font-mono">MikroTik Live + RADIUS</span>
+            </div>
           </div>
         </motion.div>
       </div>
