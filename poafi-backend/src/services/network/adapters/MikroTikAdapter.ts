@@ -181,4 +181,93 @@ export class MikroTikAdapter implements IRouterAdapter {
       await api.close().catch(() => {});
     }
   }
+
+  /**
+   * Reads real-time WAN interface traffic (Mbps) and pings 8.8.8.8 directly
+   * from the MikroTik router so operators can see live ISP throughput.
+   */
+  async measureWanStats(): Promise<{
+    wanInterface: string;
+    rxMbps: number;
+    txMbps: number;
+    pingMs: number | null;
+    packetLossPct: number | null;
+  }> {
+    const api = this.createClient(10);
+    try {
+      await api.connect();
+
+      let wanInterface = 'ether1';
+      try {
+        const routes = await api.write('/ip/route/print');
+        const defaultRoute = Array.isArray(routes)
+          ? routes.find((r: any) => r['dst-address'] === '0.0.0.0/0' && r.active === 'true') ||
+            routes.find((r: any) => r['dst-address'] === '0.0.0.0/0')
+          : null;
+        if (defaultRoute?.['immediate-gw']) {
+          const gwParts = String(defaultRoute['immediate-gw']).split('%');
+          if (gwParts[1]) wanInterface = gwParts[1].trim();
+        }
+        if (wanInterface === 'ether1') {
+          const ifaces = await api.write('/interface/print');
+          const ether1 = Array.isArray(ifaces)
+            ? ifaces.find((i: any) => i.name === 'ether1' || String(i.name).toLowerCase().includes('wan'))
+            : null;
+          if (ether1?.name) wanInterface = String(ether1.name);
+        }
+      } catch {
+        wanInterface = 'ether1';
+      }
+
+      let rxMbps = 0;
+      let txMbps = 0;
+      try {
+        const mon = await api.write('/interface/monitor-traffic', [
+          `=interface=${wanInterface}`,
+          '=once=',
+        ]);
+        const sample = Array.isArray(mon) ? mon[0] : mon;
+        if (sample) {
+          const rxBits = Number(sample['rx-bits-per-second'] || 0);
+          const txBits = Number(sample['tx-bits-per-second'] || 0);
+          rxMbps = Number((rxBits / 1_000_000).toFixed(2));
+          txMbps = Number((txBits / 1_000_000).toFixed(2));
+        }
+      } catch {
+        // leave 0 if unavailable
+      }
+
+      let pingMs: number | null = null;
+      let packetLossPct: number | null = null;
+      try {
+        const pingRows = await api.write('/ping', ['=address=8.8.8.8', '=count=4']);
+        if (Array.isArray(pingRows) && pingRows.length > 0) {
+          const validTimes = pingRows
+            .map((row: any) => {
+              const raw = String(row.time || '');
+              const msMatch = raw.match(/([\d.]+)\s*ms/i);
+              if (msMatch) return Number(msMatch[1]);
+              const usMatch = raw.match(/([\d.]+)\s*us/i);
+              if (usMatch) return Number(usMatch[1]) / 1000;
+              return NaN;
+            })
+            .filter((n) => Number.isFinite(n));
+
+          const lost = pingRows.filter((row: any) => row.status === 'timeout' || !row.time).length;
+          packetLossPct = Math.round((lost / pingRows.length) * 100);
+          if (validTimes.length > 0) {
+            pingMs = Number((validTimes.reduce((a, b) => a + b, 0) / validTimes.length).toFixed(1));
+          }
+        }
+      } catch {
+        pingMs = null;
+      }
+
+      return { wanInterface, rxMbps, txMbps, pingMs, packetLossPct };
+    } catch (error: any) {
+      throw new Error(`Failed to measure MikroTik WAN bandwidth: ${error.message || error}`);
+    } finally {
+      await api.close().catch(() => {});
+    }
+  }
 }

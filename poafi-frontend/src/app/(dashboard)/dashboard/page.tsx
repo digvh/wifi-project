@@ -27,9 +27,11 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function Dashboard() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [overview, setOverview] = useState<{
@@ -91,8 +93,11 @@ export default function Dashboard() {
       }
       setError("");
     } catch (err: any) {
-      console.error("Dashboard fetch error:", err);
-      setError(err.message || "Failed to load dashboard statistics");
+      const msg = err?.message || "Failed to load dashboard statistics";
+      if (!msg.toLowerCase().includes("unauthorized")) {
+        console.warn("Dashboard fetch warning:", msg);
+      }
+      setError(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -100,13 +105,14 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    if (!user) return;
     fetchDashboardData();
     // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
       fetchDashboardData();
     }, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   return (
     <main className="max-w-[1600px] mx-auto space-y-6">
@@ -122,8 +128,8 @@ export default function Dashboard() {
           </h1>
           <p className="text-gray-400 text-xs mt-1">
             {user?.role === "PLATFORM_ADMIN"
-              ? "Global Carrier Network & Billing Monitor"
-              : `Operator Hotspot Control Dashboard (${user?.email})`}
+              ? t("Usimamizi wa Mtandao Mkuu na Malipo", "Global Carrier Network & Billing Monitor")
+              : `${t("Dashibodi ya Mwendeshaji", "Operator Hotspot Control Dashboard")} (${user?.email})`}
           </p>
         </div>
 
@@ -134,7 +140,7 @@ export default function Dashboard() {
             className="glass-panel px-3.5 py-2 flex items-center gap-2 text-xs text-gray-300 hover:text-white transition-colors"
           >
             <RefreshCw size={14} className={refreshing ? "animate-spin text-[#00f3ff]" : ""} />
-            {refreshing ? "Syncing..." : "Sync Live Data"}
+            {refreshing ? t("Inasawazisha...", "Syncing...") : t("Sasisha Data", "Sync Live Data")}
           </button>
 
           <div className="glass-panel px-4 py-2 flex items-center gap-2 text-xs">
@@ -145,8 +151,8 @@ export default function Dashboard() {
             />
             <span>
               {overview.routers.online > 0
-                ? `${overview.routers.online} Gateway(s) Online`
-                : "No Gateways Online"}
+                ? `${overview.routers.online} ${t("Mtambo Hewani", "Gateway(s) Online")}`
+                : t("Hakuna Mtambo Hewani", "No Gateways Online")}
             </span>
           </div>
         </div>
@@ -170,14 +176,14 @@ export default function Dashboard() {
                 <Truck className="text-[#00f3ff] shrink-0" size={18} />
                 <div>
                   <p className="font-bold">
-                    {req.deviceName || "Your Router"} —{" "}
+                    {req.deviceName || t("Router Yako", "Your Router")} —{" "}
                     {req.status === "SHIPPED_BACK"
-                      ? "Kimetumwa Kwako! / Shipped back to you"
+                      ? t("Kimetumwa kwako!", "Shipped back to you")
                       : req.status === "CONFIGURED"
-                        ? "Kimesanidiwa! / Configured and ready for delivery"
+                        ? t("Kimesanidiwa na kiko tayari kutumwa", "Configured and ready for delivery")
                         : req.status === "DEVICE_RECEIVED"
-                          ? "Kimepokelewa na PoaFi / Device received by admin"
-                          : "Kinashughulikiwa / Configuration in progress"}
+                          ? t("Kimepokelewa na msimamizi wa PoaFi", "Device received by admin")
+                          : t("Kinashughulikiwa", "Configuration in progress")}
                   </p>
                   {req.adminNotes && <p className="text-gray-300 mt-0.5">{req.adminNotes}</p>}
                 </div>
@@ -186,7 +192,7 @@ export default function Dashboard() {
                 href="/device-setup"
                 className="text-[#00f3ff] font-bold hover:underline shrink-0"
               >
-                View Setup Status →
+                {t("Tazama Hali →", "View Setup Status →")}
               </Link>
             </div>
           ))}
@@ -204,12 +210,12 @@ export default function Dashboard() {
         >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-gray-400 text-xs uppercase tracking-wider font-semibold">Active Sessions</p>
+              <p className="text-gray-400 text-xs uppercase tracking-wider font-semibold">{t("Wateja Hewani", "Active Sessions")}</p>
               <h2 className="text-3xl font-bold mt-2 font-mono text-white">
                 {loading ? "..." : overview.activeSessions.toLocaleString()}
               </h2>
               <p className="text-[11px] text-[#00f3ff] mt-1 flex items-center gap-1">
-                <Users size={12} /> Currently browsing
+                <Users size={12} /> {t("Wanatumia sasa", "Currently browsing")}
               </p>
             </div>
             <div className="p-3 bg-[#00f3ff]/10 border border-[#00f3ff]/20 rounded-xl text-[#00f3ff]">
@@ -227,12 +233,12 @@ export default function Dashboard() {
         >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-gray-400 text-xs uppercase tracking-wider font-semibold">Today's Revenue</p>
+              <p className="text-gray-400 text-xs uppercase tracking-wider font-semibold">{t("Mapato ya Leo", "Today's Revenue")}</p>
               <h2 className="text-3xl font-bold mt-2 font-mono text-[#00f3ff]">
                 TZS {loading ? "..." : overview.todayRevenueTzs.toLocaleString()}
               </h2>
               <p className="text-[11px] text-gray-400 mt-1">
-                {overview.todayTransactions} transaction(s) today
+                {overview.todayTransactions} {t("miamala leo", "transaction(s) today")}
               </p>
             </div>
             <div className="p-3 bg-purple-500/10 border border-purple-500/20 rounded-xl text-purple-400">
@@ -250,15 +256,15 @@ export default function Dashboard() {
         >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-gray-400 text-xs uppercase tracking-wider font-semibold">All-Time Revenue</p>
+              <p className="text-gray-400 text-xs uppercase tracking-wider font-semibold">{t("Mapato Yote", "All-Time Revenue")}</p>
               <h2 className="text-3xl font-bold mt-2 font-mono text-white">
                 TZS {loading ? "..." : overview.totalRevenueTzs.toLocaleString()}
               </h2>
               <p className="text-[11px] text-green-400 mt-1 flex items-center gap-1">
-                <TrendingUp size={12} /> {overview.successfulTransactions} paid orders
+                <TrendingUp size={12} /> {overview.successfulTransactions} {t("oda zilizolipwa", "paid orders")}
               </p>
               <p className="text-[11px] text-gray-400 mt-0.5">
-                This month: <span className="text-white font-semibold">TZS {(overview.monthRevenueTzs || 0).toLocaleString()}</span> ({overview.monthTransactions || 0})
+                {t("Mwezi huu:", "This month:")} <span className="text-white font-semibold">TZS {(overview.monthRevenueTzs || 0).toLocaleString()}</span> ({overview.monthTransactions || 0})
               </p>
             </div>
             <div className="p-3 bg-green-500/10 border border-green-500/20 rounded-xl text-green-400">
@@ -276,12 +282,12 @@ export default function Dashboard() {
         >
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-gray-400 text-xs uppercase tracking-wider font-semibold">Voucher Inventory</p>
+              <p className="text-gray-400 text-xs uppercase tracking-wider font-semibold">{t("Hifadhi ya Vocha", "Voucher Inventory")}</p>
               <h2 className="text-3xl font-bold mt-2 font-mono text-white">
                 {loading ? "..." : overview.vouchers.total.toLocaleString()}
               </h2>
               <p className="text-[11px] text-gray-400 mt-1">
-                <span className="text-green-400 font-semibold">{overview.vouchers.unused}</span> ready to sell
+                <span className="text-green-400 font-semibold">{overview.vouchers.unused}</span> {t("tayari kuuzwa", "ready to sell")}
               </p>
             </div>
             <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
@@ -303,14 +309,14 @@ export default function Dashboard() {
           <div className="flex justify-between items-center mb-6">
             <div>
               <h3 className="text-lg font-bold flex items-center gap-2">
-                <TrendingUp size={18} className="text-[#00f3ff]" /> Revenue Trajectory (Last 7 Days)
+                <TrendingUp size={18} className="text-[#00f3ff]" /> {t("Mwenendo wa Mapato (Siku 7 Zilizopita)", "Revenue Trajectory (Last 7 Days)")}
               </h3>
               <p className="text-xs text-gray-400 mt-0.5">
-                Automated mobile money receipts aggregated in real time
+                {t("Mapato ya malipo ya simu yanayokusanywa papo hapo", "Automated mobile money receipts aggregated in real time")}
               </p>
             </div>
             <span className="text-xs font-mono text-gray-400 bg-white/5 px-2.5 py-1 rounded-md border border-white/5">
-              TZS Currency
+              {t("Sarafu: TZS", "TZS Currency")}
             </span>
           </div>
 
@@ -338,7 +344,7 @@ export default function Dashboard() {
                     borderRadius: "12px",
                     boxShadow: "0 4px 20px rgba(0,0,0,0.5)",
                   }}
-                  formatter={(value: any) => [`TZS ${Number(value).toLocaleString()}`, "Revenue"]}
+                  formatter={(value: any) => [`TZS ${Number(value).toLocaleString()}`, t("Mapato", "Revenue")]}
                 />
                 <Area
                   type="monotone"
@@ -363,15 +369,15 @@ export default function Dashboard() {
           <div>
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold flex items-center gap-2">
-                <Server size={18} className="text-[#00f3ff]" /> Router Gateways
+                <Server size={18} className="text-[#00f3ff]" /> {t("Mitambo ya Mtandao", "Router Gateways")}
               </h3>
-              <span className="text-[11px] text-gray-400">{routers.length} Registered</span>
+              <span className="text-[11px] text-gray-400">{routers.length} {t("Imesajiliwa", "Registered")}</span>
             </div>
 
             <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
               {routers.length === 0 ? (
                 <div className="p-6 text-center text-xs text-gray-400 bg-white/5 rounded-xl">
-                  No routers registered yet. Go to Routers page to add one.
+                  {t("Hakuna router iliyosajiliwa bado. Nenda kwenye ukurasa wa Routers kuongeza.", "No routers registered yet. Go to Routers page to add one.")}
                 </div>
               ) : (
                 routers.map((r) => {
@@ -406,7 +412,7 @@ export default function Dashboard() {
                             : "bg-red-500/20 text-red-400 border border-red-500/30"
                         }`}
                       >
-                        {r.status}
+                        {isOnline ? t("HEWANI", "ONLINE") : t("HAIPATIKANI", "OFFLINE")}
                       </span>
                     </div>
                   );
@@ -424,14 +430,14 @@ export default function Dashboard() {
                     className="text-[10px] bg-white/5 border border-white/10 px-2 py-1 rounded-lg text-gray-300 flex items-center gap-1"
                   >
                     <MapPin size={10} className="text-[#00f3ff]" />
-                    {s.name}: <strong className="text-white">{s.onlineRouters}/{s.totalRouters}</strong> online
+                    {s.name}: <strong className="text-white">{s.onlineRouters}/{s.totalRouters}</strong> {t("hewani", "online")}
                   </span>
                 ))}
               </div>
             )}
             <div className="text-[11px] text-gray-400 flex justify-between items-center">
-              <span>Gateway Engine: Multi-Brand v2</span>
-              <span className="text-[#00f3ff] font-mono">MikroTik Live + RADIUS</span>
+              <span>{t("Injini ya Mtandao: Multi-Brand v2", "Gateway Engine: Multi-Brand v2")}</span>
+              <span className="text-[#00f3ff] font-mono">{t("MikroTik Moja kwa Moja + RADIUS", "MikroTik Live + RADIUS")}</span>
             </div>
           </div>
         </motion.div>
@@ -445,11 +451,11 @@ export default function Dashboard() {
         className="glass-panel p-6"
       >
         <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
-          <Zap size={18} className="text-[#9d00ff]" /> Best-Selling Wi-Fi Packages
+          <Zap size={18} className="text-[#9d00ff]" /> {t("Vifurushi Vinavyouzwa Zaidi", "Best-Selling Wi-Fi Packages")}
         </h3>
 
         {packages.length === 0 ? (
-          <p className="text-xs text-gray-400 text-center py-4">No packages created yet.</p>
+          <p className="text-xs text-gray-400 text-center py-4">{t("Hakuna kifurushi kilichoundwa bado.", "No packages created yet.")}</p>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             {packages.map((pkg) => (
@@ -464,14 +470,14 @@ export default function Dashboard() {
                   </p>
                   <p className="text-[11px] text-gray-400 mt-0.5">
                     {pkg.durationMinutes >= 1440
-                      ? `${Math.round(pkg.durationMinutes / 1440)} Days Access`
-                      : `${Math.round(pkg.durationMinutes / 60)} Hours Access`}
+                      ? `${Math.round(pkg.durationMinutes / 1440)} ${t("Siku", "Days Access")}`
+                      : `${Math.round(pkg.durationMinutes / 60)} ${t("Saa", "Hours Access")}`}
                   </p>
                 </div>
 
                 <div className="mt-4 pt-3 border-t border-white/5 flex justify-between items-center text-xs text-gray-400">
-                  <span>Sales</span>
-                  <span className="font-mono text-white font-bold">{pkg.totalPayments || 0} orders</span>
+                  <span>{t("Mauzo", "Sales")}</span>
+                  <span className="font-mono text-white font-bold">{pkg.totalPayments || 0} {t("oda", "orders")}</span>
                 </div>
               </div>
             ))}

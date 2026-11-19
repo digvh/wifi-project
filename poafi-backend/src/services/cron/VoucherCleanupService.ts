@@ -1,4 +1,5 @@
 import { prisma } from '../../config/database';
+import { env } from '../../config/env';
 import { decryptSecret } from '../../utils/crypto';
 import { RouterAdapterFactory } from '../network';
 import { PaymentService } from '../payment/PaymentService';
@@ -81,6 +82,16 @@ export class VoucherCleanupService {
             console.warn(
               `[Auto-Expiry] No ONLINE router for tenant ${tenantId}; marking EXPIRED in DB only`
             );
+            continue;
+          }
+
+          const skipDirectTcp =
+            !routerDevice.host ||
+            routerDevice.host === '0.0.0.0' ||
+            (routerDevice.host.startsWith('10.8.0.') && !env.WG_SERVER_ENDPOINT);
+
+          if (skipDirectTcp) {
+            // Router is in Shared Hosting HTTPS Cloud Sync mode; it removes EXPIRED vouchers on its 15s poll.
             continue;
           }
 

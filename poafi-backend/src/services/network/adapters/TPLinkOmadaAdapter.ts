@@ -33,6 +33,26 @@ export interface OmadaDiscoveryResult {
   primaryModel?: string;
 }
 
+export interface OmadaPortalSetupOptions {
+  portalUrl: string;
+  portalName?: string;
+  authType?: number;
+  walledGardenDomains?: string[];
+  siteId?: string;
+  radiusServerHost?: string;
+  radiusSecret?: string;
+}
+
+export interface OmadaPortalSetupResult {
+  ok: boolean;
+  siteId: string;
+  portalName: string;
+  portalUrl: string;
+  walledGardenDomains: string[];
+  endpointUsed: string;
+  action: 'created' | 'updated';
+}
+
 interface OmadaSession {
   omadacId: string;
   controllerVer: string;
@@ -414,6 +434,262 @@ export class TPLinkOmadaAdapter implements IRouterAdapter {
       return true;
     } catch (error: any) {
       throw new Error(`Failed to disconnect Omada client: ${error.message || error}`);
+    } finally {
+      await this.logout(session);
+    }
+  }
+
+  /**
+   * One-click configuration of the Omada Captive Portal + Pre-Authentication
+   * (Walled Garden) rules via the Omada SDN Controller v5+ REST API.
+   */
+  async configureHotspotPortal(options: OmadaPortalSetupOptions): Promise<OmadaPortalSetupResult> {
+    const portalName = (options.portalName || 'PoaFi Hotspot').trim().slice(0, 64);
+    let portalHostname: string | null = null;
+    try {
+      portalHostname = new URL(options.portalUrl).hostname;
+    } catch {
+      throw new Error('Invalid Portal URL supplied for Omada configuration');
+    }
+
+    const walledGardenDomains = Array.from(
+      new Set(
+        [
+          ...(options.walledGardenDomains || []),
+          portalHostname,
+          'poafi.co.tz',
+          '*.poafi.co.tz',
+          'azampay.co.tz',
+          '*.azampay.co.tz',
+        ].filter((d): d is string => Boolean(d && d !== 'localhost' && d !== '127.0.0.1')),
+      ),
+    );
+
+    const session = await this.login();
+    try {
+      const siteId = options.siteId?.trim() || (await this.resolveSiteId(session));
+      const encodedSite = encodeURIComponent(siteId);
+
+      // 1. Inspect existing portals on this Omada site (v5+ uses /setting/portals, fallback /setting/portal)
+      let listPath = `/${session.omadacId}/api/v2/sites/${encodedSite}/setting/portals`;
+      let listRes = await this.rawRequest(
+        'GET',
+        `${listPath}?currentPage=1&currentPageSize=50`,
+        undefined,
+        session,
+      );
+
+      if (listRes.status === 404) {
+        listPath = `/${session.omadacId}/api/v2/sites/${encodedSite}/setting/portal`;
+        listRes = await this.rawRequest('GET', listPath, undefined, session);
+      }
+
+      if (listRes.status >= 400 || (listRes.json?.errorCode !== undefined && listRes.json.errorCode !== 0)) {
+        throw new Error(listRes.json?.msg || `Omada portal lookup failed (HTTP ${listRes.status})`);
+      }
+
+      const rawResult = listRes.json?.result?.data || listRes.json?.result || [];
+      const existingPortals: any[] = Array.isArray(rawResult)
+        ? rawResult
+        : rawResult && typeof rawResult === 'object' && rawResult.id
+          ? [rawResult]
+          : [];
+
+      const matchedPortal = existingPortals.find(
+        (p: any) =>
+          String(p.name || '').toLowerCase() === portalName.toLowerCase() ||
+          String(p.name || '').toLowerCase().includes('poafi'),
+      );
+
+      const portalPayload: Record<string, any> = {
+        ...(matchedPortal || {}),
+        name: portalName,
+        enable: true,
+        authType: options.authType ?? matchedPortal?.authType ?? 11,
+        landingPage: 2,
+        landingUrl: options.portalUrl,
+        externalUrl: options.portalUrl,
+        redirectUrl: options.portalUrl,
+        freeAuthRule: {
+          ...(matchedPortal?.freeAuthRule || {}),
+          enable: true,
+          preAuthAccess: true,
+          domainList: walledGardenDomains,
+        },
+        preAuthAccess: {
+          ...(matchedPortal?.preAuthAccess || {}),
+          enable: true,
+          domainList: walledGardenDomains,
+        },
+        walledGarden: {
+          enable: true,
+          domains: walledGardenDomains,
+        },
+      };
+
+      let saveRes;
+      let endpointUsed = listPath;
+      let action: 'created' | 'updated';
+
+      if (matchedPortal?.id) {
+        action = 'updated';
+        endpointUsed = `${listPath}/${encodeURIComponent(String(matchedPortal.id))}`;
+        saveRes = await this.rawRequest('PATCH', endpointUsed, portalPayload, session);
+        if (saveRes.status === 404 || saveRes.status === 405) {
+          saveRes = await this.rawRequest('PUT', endpointUsed, portalPayload, session);
+        }
+      } else {
+        action = 'created';
+        saveRes = await this.rawRequest('POST', listPath, portalPayload, session);
+        if (saveRes.status === 405 && !listPath.endsWith('portals')) {
+          action = 'updated';
+          saveRes = await this.rawRequest('PATCH', listPath, portalPayload, session);
+        }
+      }
+
+      if (saveRes.status >= 400 || (saveRes.json?.errorCode !== undefined && saveRes.json.errorCode !== 0)) {
+        throw new Error(saveRes.json?.msg || `HTTP ${saveRes.status}`);
+      }
+
+      // 2. Best-effort push to dedicated pre-auth/walled-garden policy endpoint if present
+      if (walledGardenDomains.length > 0) {
+        await this.rawRequest(
+          'POST',
+          `/${session.omadacId}/api/v2/sites/${encodedSite}/setting/portal/freePolicy`,
+          { enable: true, domainList: walledGardenDomains },
+          session,
+        ).catch(() => {});
+      }
+
+      // 3. Optional RADIUS profile sync if RADIUS host + secret supplied
+      if (options.radiusServerHost && options.radiusSecret) {
+        await this.rawRequest(
+          'POST',
+          `/${session.omadacId}/api/v2/sites/${encodedSite}/setting/radius`,
+          {
+            name: 'PoaFi RADIUS',
+            authServerIp: options.radiusServerHost,
+            authPort: 1812,
+            authKey: options.radiusSecret,
+            acctEnable: true,
+            acctServerIp: options.radiusServerHost,
+            acctPort: 1813,
+            acctKey: options.radiusSecret,
+          },
+          session,
+        ).catch(() => {});
+      }
+
+      return {
+        ok: true,
+        siteId,
+        portalName,
+        portalUrl: options.portalUrl,
+        walledGardenDomains,
+        endpointUsed,
+        action,
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to configure Omada Portal & Walled Garden: ${error.message || error}`);
+    } finally {
+      await this.logout(session);
+    }
+  }
+
+  /**
+   * Reads live WAN / site throughput (Mbps), device count, and active client count
+   * from the TP-Link Omada SDN Controller API.
+   */
+  async measureWanStats(): Promise<{
+    wanInterface: string;
+    rxMbps: number;
+    txMbps: number;
+    pingMs: number | null;
+    packetLossPct: number | null;
+    activeClients: number;
+    deviceCount: number;
+    controllerVer: string;
+  }> {
+    const t0 = Date.now();
+    const session = await this.login();
+    const controllerRttMs = Math.max(1, Date.now() - t0);
+
+    try {
+      const siteId = await this.resolveSiteId(session);
+      const encodedSite = encodeURIComponent(siteId);
+
+      const [devRes, clientsRes] = await Promise.all([
+        this.rawRequest(
+          'GET',
+          `/${session.omadacId}/api/v2/sites/${encodedSite}/devices?currentPage=1&currentPageSize=50`,
+          undefined,
+          session,
+        ),
+        this.rawRequest(
+          'GET',
+          `/${session.omadacId}/api/v2/sites/${encodedSite}/clients?currentPage=1&currentPageSize=100&filters.active=true`,
+          undefined,
+          session,
+        ).catch(() => ({ status: 200, json: { errorCode: 0, result: { data: [] } } })),
+      ]);
+
+      const rawDevices = devRes.json?.result?.data || devRes.json?.result || [];
+      const devices: any[] = Array.isArray(rawDevices) ? rawDevices : [];
+      const gateway = devices.find((d) => String(d.type || '').toLowerCase().includes('gateway'));
+
+      const rawClients = clientsRes.json?.result?.data || clientsRes.json?.result || [];
+      const clients: any[] = Array.isArray(rawClients) ? rawClients : [];
+      const totalClients = Number(clientsRes.json?.result?.totalRows ?? clients.length);
+
+      let rxBps = 0;
+      let txBps = 0;
+
+      if (gateway) {
+        // Omada gateway telemetry (supports bytes/sec or bps field variants across v5 releases)
+        const gwDown = Number(gateway.download ?? gateway.rxRate ?? gateway.downLoadRate ?? 0);
+        const gwUp = Number(gateway.upload ?? gateway.txRate ?? gateway.upLoadRate ?? 0);
+        // Omada `download`/`upload` in devices list are typically bytes/sec; convert to bits/sec
+        rxBps = gwDown > 0 ? gwDown * 8 : 0;
+        txBps = gwUp > 0 ? gwUp * 8 : 0;
+
+        if (rxBps === 0 && txBps === 0 && Array.isArray(gateway.wanPortStats)) {
+          for (const wp of gateway.wanPortStats) {
+            rxBps += Number(wp.rxRate || 0) * 8;
+            txBps += Number(wp.txRate || 0) * 8;
+          }
+        }
+      }
+
+      if (rxBps === 0 && txBps === 0) {
+        // Fallback: sum active client rates (bytes/sec -> bits/sec)
+        for (const c of clients) {
+          rxBps += Number(c.trafficDownRate ?? c.downPacketRate ?? c.rxRate ?? 0) * 8;
+          txBps += Number(c.trafficUpRate ?? c.upPacketRate ?? c.txRate ?? 0) * 8;
+        }
+      }
+
+      const rxMbps = Number((rxBps / 1_000_000).toFixed(2));
+      const txMbps = Number((txBps / 1_000_000).toFixed(2));
+      const labelTarget = gateway
+        ? `WAN (${gateway.model || gateway.name || 'Omada Gateway'})`
+        : `${devices[0]?.model || 'Omada EAP'} (${devices.length} dev)`;
+
+      const gwLatency = gateway?.latency !== undefined && Number.isFinite(Number(gateway.latency))
+        ? Number(gateway.latency)
+        : controllerRttMs;
+
+      return {
+        wanInterface: labelTarget,
+        rxMbps,
+        txMbps,
+        pingMs: gwLatency,
+        packetLossPct: 0,
+        activeClients: Number.isFinite(totalClients) ? totalClients : clients.length,
+        deviceCount: devices.length,
+        controllerVer: session.controllerVer,
+      };
+    } catch (error: any) {
+      throw new Error(`Failed to measure Omada WAN telemetry: ${error.message || error}`);
     } finally {
       await this.logout(session);
     }

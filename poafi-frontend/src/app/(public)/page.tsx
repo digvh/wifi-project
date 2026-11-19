@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { motion } from "framer-motion";
 import { 
   Wifi, 
   Smartphone, 
@@ -117,9 +118,14 @@ export default function PublicHomePage() {
   ];
 
   return (
-    <div className="space-y-24 pb-24">
+    <div className="space-y-16 sm:space-y-24 pb-20 sm:pb-24">
       {/* 1. HERO SECTION */}
-      <section className="relative overflow-hidden pt-10 md:pt-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-center">
+      <motion.section
+        initial={{ opacity: 0, y: 18 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.45, ease: "easeOut" }}
+        className="relative overflow-hidden pt-8 sm:pt-10 md:pt-16 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto text-center"
+      >
         {/* Glow ambient background */}
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-gradient-to-tr from-[#00f3ff]/20 to-[#9d00ff]/20 rounded-full blur-[100px] pointer-events-none -z-10" />
 
@@ -157,7 +163,7 @@ export default function PublicHomePage() {
         </div>
 
         {/* Headline */}
-        <h1 className="text-4xl sm:text-6xl lg:text-7xl font-black tracking-tight text-white max-w-5xl mx-auto leading-tight">
+        <h1 className="text-3xl sm:text-5xl lg:text-7xl font-black tracking-tight text-white max-w-5xl mx-auto leading-tight">
           {lang === "sw" ? (
             <>
               Geuza Intaneti Yako Kuwa{" "}
@@ -242,15 +248,15 @@ export default function PublicHomePage() {
             </div>
           </div>
         </div>
-      </section>
+      </motion.section>
 
       {/* 2. HOW IT WORKS (3 SIMPLE STEPS) */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-16">
           <h2 className="text-xs font-mono uppercase tracking-widest text-[#00f3ff] mb-2">
             {lang === "sw" ? "Jinsi Mfumo Unavyofanya Kazi" : "How It Works"}
           </h2>
-          <h3 className="text-3xl sm:text-4xl font-extrabold text-white">
+          <h3 className="text-2xl sm:text-4xl font-extrabold text-white">
             {lang === "sw" ? "Hatua 3 Rahisi za Kuanza Kupokea Pesa" : "3 Easy Steps to Start Generating Revenue"}
           </h3>
           <p className="text-gray-400 text-sm mt-3">
@@ -260,9 +266,16 @@ export default function PublicHomePage() {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-8 relative">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5 sm:gap-8 relative">
           {/* Step 1 */}
-          <div className="glass-panel p-8 rounded-3xl border border-white/10 relative group hover:border-[#00f3ff]/40 transition-all">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.35 }}
+            whileHover={{ y: -4 }}
+            className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 relative group hover:border-[#00f3ff]/40 transition-all"
+          >
             <div className="w-14 h-14 rounded-2xl bg-[#00f3ff]/10 border border-[#00f3ff]/30 text-[#00f3ff] flex items-center justify-center font-black text-xl mb-6">
               01
             </div>
@@ -277,10 +290,17 @@ export default function PublicHomePage() {
             <Link href="/guide" className="text-[11px] text-[#00f3ff] font-semibold flex items-center gap-1 hover:underline">
               <span>{lang === "sw" ? "Soma mwongozo wa hatua kwa hatua" : "Read step-by-step guide"}</span> &rarr;
             </Link>
-          </div>
+          </motion.div>
 
           {/* Step 2 */}
-          <div className="glass-panel p-8 rounded-3xl border border-white/10 relative group hover:border-[#00f3ff]/40 transition-all">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.35, delay: 0.08 }}
+            whileHover={{ y: -4 }}
+            className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 relative group hover:border-[#00f3ff]/40 transition-all"
+          >
             <div className="w-14 h-14 rounded-2xl bg-[#9d00ff]/15 border border-[#9d00ff]/30 text-[#9d00ff] flex items-center justify-center font-black text-xl mb-6">
               02
             </div>
@@ -295,10 +315,17 @@ export default function PublicHomePage() {
             <span className="text-[11px] text-[#9d00ff] font-semibold flex items-center gap-1">
               <span>{lang === "sw" ? "Wewe ndiye unayeamua bei zako" : "You define your own rates & bandwidth"}</span>
             </span>
-          </div>
+          </motion.div>
 
           {/* Step 3 */}
-          <div className="glass-panel p-8 rounded-3xl border border-white/10 relative group hover:border-[#00f3ff]/40 transition-all">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true, amount: 0.2 }}
+            transition={{ duration: 0.35, delay: 0.16 }}
+            whileHover={{ y: -4 }}
+            className="glass-panel p-6 sm:p-8 rounded-3xl border border-white/10 relative group hover:border-[#00f3ff]/40 transition-all"
+          >
             <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 flex items-center justify-center font-black text-xl mb-6">
               03
             </div>
@@ -313,30 +340,35 @@ export default function PublicHomePage() {
             <span className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1">
               <span>{lang === "sw" ? "Pesa inaingia bila wewe kuwepo" : "Passive income 24/7 on autopilot"}</span>
             </span>
-          </div>
+          </motion.div>
         </div>
       </section>
 
       {/* 3. CORE FEATURES GRID */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="text-center max-w-3xl mx-auto mb-16">
+        <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-16">
           <h2 className="text-xs font-mono uppercase tracking-widest text-[#00f3ff] mb-2">
             {lang === "sw" ? "Sifa Kuu za Mfumo" : "Platform Features"}
           </h2>
-          <h3 className="text-3xl sm:text-4xl font-extrabold text-white">
+          <h3 className="text-2xl sm:text-4xl font-extrabold text-white">
             {lang === "sw"
               ? "Kila Kitu Unachohitaji Ili Kuendesha Mtandao Bila Stress"
               : "Everything You Need to Run an Unattended Wi-Fi Network"}
           </h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 sm:gap-6">
           {features.map((feat, idx) => {
             const Icon = feat.icon;
             return (
-              <div
+              <motion.div
                 key={idx}
-                className="glass-panel p-6 rounded-2xl border border-white/10 hover:border-white/25 transition-all group"
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, amount: 0.15 }}
+                transition={{ duration: 0.3, delay: idx * 0.05 }}
+                whileHover={{ y: -3 }}
+                className="glass-panel p-5 sm:p-6 rounded-2xl border border-white/10 hover:border-white/25 transition-all group"
               >
                 <div className="w-12 h-12 rounded-xl bg-gradient-to-tr from-[#00f3ff]/15 to-[#9d00ff]/15 border border-white/10 flex items-center justify-center text-[#00f3ff] group-hover:scale-110 transition-transform mb-4">
                   <Icon size={22} />
@@ -344,7 +376,7 @@ export default function PublicHomePage() {
                 <h4 className="text-lg font-bold text-white mb-0.5">{feat.title}</h4>
                 <p className="text-[11px] text-[#00f3ff] font-mono mb-2 uppercase">{feat.subtitle}</p>
                 <p className="text-xs text-gray-400 leading-relaxed">{feat.desc}</p>
-              </div>
+              </motion.div>
             );
           })}
         </div>
@@ -352,7 +384,13 @@ export default function PublicHomePage() {
 
       {/* 4. OPERATOR REVENUE CALCULATOR */}
       <section className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="glass-panel p-8 sm:p-12 rounded-3xl border border-white/15 relative overflow-hidden bg-gradient-to-b from-white/[0.04] to-transparent shadow-2xl">
+        <motion.div
+          initial={{ opacity: 0, y: 18 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true, amount: 0.15 }}
+          transition={{ duration: 0.4 }}
+          className="glass-panel p-5 sm:p-8 lg:p-12 rounded-3xl border border-white/15 relative overflow-hidden bg-gradient-to-b from-white/[0.04] to-transparent shadow-2xl"
+        >
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-8 pb-8 border-b border-white/10">
             <div>
               <div className="inline-flex items-center gap-1.5 text-xs font-bold text-[#00f3ff] mb-2">
@@ -458,7 +496,7 @@ export default function PublicHomePage() {
               </div>
             </div>
           </div>
-        </div>
+        </motion.div>
       </section>
 
       {/* 5. SUPPORTED ROUTERS SHOWCASE */}
@@ -510,8 +548,8 @@ export default function PublicHomePage() {
 
       {/* 6. CALL TO ACTION BANNER */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="glass-panel p-10 sm:p-16 rounded-3xl border border-white/20 relative overflow-hidden bg-gradient-to-r from-[#00f3ff]/10 via-[#9d00ff]/10 to-[#00f3ff]/10 text-center">
-          <h3 className="text-3xl sm:text-5xl font-black text-white max-w-3xl mx-auto leading-tight">
+        <div className="glass-panel p-6 sm:p-10 md:p-16 rounded-3xl border border-white/20 relative overflow-hidden bg-gradient-to-r from-[#00f3ff]/10 via-[#9d00ff]/10 to-[#00f3ff]/10 text-center">
+          <h3 className="text-2xl sm:text-4xl lg:text-5xl font-black text-white max-w-3xl mx-auto leading-tight">
             {lang === "sw" ? "Uko Tayari Kuanza Biashara Yako ya Wi-Fi Leo?" : "Ready to Start Your Wi-Fi Hotspot Business?"}
           </h3>
           <p className="text-gray-300 text-sm sm:text-base max-w-2xl mx-auto mt-4 leading-relaxed">
@@ -525,7 +563,7 @@ export default function PublicHomePage() {
               href="/register"
               className="w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-[#00f3ff] to-[#9d00ff] text-white font-extrabold text-sm rounded-2xl hover:opacity-95 shadow-xl shadow-[#00f3ff]/20 transition-all"
             >
-              {lang === "sw" ? "Tuma Maombi ya Bure / Apply Now →" : "Apply as Operator (Free) →"}
+              {lang === "sw" ? "Tuma Maombi ya Bure →" : "Apply as Operator (Free) →"}
             </Link>
 
             <Link

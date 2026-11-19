@@ -70,6 +70,11 @@ export const createPackageSchema = z.object({
   downloadKbps: z.coerce.number().int().min(64).default(3000),
   uploadKbps: z.coerce.number().int().min(64).default(1000),
   routerId: z.string().uuid().optional().nullable(),
+  isOffer: z.boolean().optional().default(false),
+  offerType: z.enum(['FIRST_TIME_FREE', 'LIMITED_PROMO', 'HAPPY_HOUR']).optional().nullable(),
+  offerActive: z.boolean().optional().default(true),
+  originalPriceTzs: z.coerce.number().int().min(0).optional().nullable(),
+  offerEndsAt: z.string().datetime().optional().nullable(),
 });
 
 export const updatePackageSchema = z.object({
@@ -79,6 +84,19 @@ export const updatePackageSchema = z.object({
   downloadKbps: z.coerce.number().int().min(64).optional(),
   uploadKbps: z.coerce.number().int().min(64).optional(),
   routerId: z.string().uuid().optional().nullable(),
+  isOffer: z.boolean().optional(),
+  offerType: z.enum(['FIRST_TIME_FREE', 'LIMITED_PROMO', 'HAPPY_HOUR']).optional().nullable(),
+  offerActive: z.boolean().optional(),
+  originalPriceTzs: z.coerce.number().int().min(0).optional().nullable(),
+  offerEndsAt: z.string().datetime().optional().nullable(),
+});
+
+export const claimOfferSchema = z.object({
+  tenantSlug: z.string().min(1, 'Operator identifier is required'),
+  packageId: z.string().uuid('Invalid package ID'),
+  deviceId: z.string().min(4).max(120).optional(),
+  macAddress: z.string().min(8).max(32).optional(),
+  phoneNumber: z.string().min(9).max(20).optional(),
 });
 
 // Vouchers

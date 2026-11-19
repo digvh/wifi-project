@@ -140,14 +140,14 @@ function PublicNavbar() {
                 href="/dashboard"
                 className="text-xs bg-white/10 hover:bg-white/15 text-white font-bold px-4 py-2.5 rounded-xl transition-colors border border-white/20"
               >
-                Dashboard
+                {lang === "sw" ? "Dashibodi" : "Dashboard"}
               </Link>
             ) : (
               <Link
                 href="/login"
                 className="text-xs text-gray-300 hover:text-white px-3 py-2 rounded-xl transition-colors"
               >
-                {lang === "sw" ? "Ingia / Login" : "Login"}
+                {lang === "sw" ? "Ingia" : "Login"}
               </Link>
             )}
 
@@ -156,7 +156,7 @@ function PublicNavbar() {
               className="text-xs bg-gradient-to-r from-[#00f3ff] to-[#9d00ff] text-white font-bold px-4 py-2.5 rounded-xl hover:opacity-95 transition-opacity shadow-lg shadow-[#00f3ff]/20 flex items-center gap-1.5"
             >
               <Sparkles size={14} />
-              <span>{lang === "sw" ? "Tuma Maombi / Apply" : "Apply as Operator"}</span>
+              <span>{lang === "sw" ? "Tuma Maombi" : "Apply as Operator"}</span>
             </Link>
           </div>
 
@@ -240,7 +240,7 @@ function PublicNavbar() {
                 onClick={() => setMobileMenuOpen(false)}
                 className="flex items-center justify-center py-2.5 px-3 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-gray-300"
               >
-                {lang === "sw" ? "Ingia / Login" : "Operator Login"}
+                {lang === "sw" ? "Ingia" : "Operator Login"}
               </Link>
 
               <Link
@@ -352,7 +352,7 @@ function PublicFooter() {
         {/* Contact Details */}
         <div>
           <h4 className="text-white font-bold text-sm mb-4">
-            {lang === "sw" ? "Mawasiliano / Helpdesk" : "Support Helpdesk"}
+            {lang === "sw" ? "Dawati la Msaada" : "Support Helpdesk"}
           </h4>
           <div className="space-y-3 text-xs">
             <div className="flex items-start gap-2.5">
@@ -372,7 +372,7 @@ function PublicFooter() {
                 href="/login"
                 className="inline-flex items-center gap-1.5 text-xs text-gray-300 hover:text-white underline"
               >
-                <span>{lang === "sw" ? "Operator Login →" : "Sign in to Dashboard →"}</span>
+                <span>{lang === "sw" ? "Ingia Kwenye Dashibodi →" : "Sign in to Dashboard →"}</span>
               </Link>
             </div>
           </div>
@@ -393,6 +393,7 @@ function PublicFooter() {
 }
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
+  const { lang } = useLanguage();
   return (
     <div className="min-h-screen flex flex-col bg-[#0a0a0f] text-white selection:bg-[#00f3ff] selection:text-black">
       <PublicNavbar />
@@ -403,10 +404,10 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
         href="https://wa.me/255754000000?text=Habari%20PoaFi!%20Ninahitaji%20msaada%20wa%20kufunga%20router%20yangu%20au%20kujiunga."
         target="_blank"
         rel="noopener noreferrer"
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2.5 bg-[#25D366] hover:bg-[#20ba59] text-white px-4 py-3 rounded-full shadow-2xl shadow-[#25D366]/40 transition-transform hover:scale-105 group text-sm font-bold"
+        className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 flex items-center gap-2 bg-[#25D366] hover:bg-[#20ba59] text-white px-3.5 py-2.5 sm:px-4 sm:py-3 rounded-full shadow-2xl shadow-[#25D366]/40 transition-transform hover:scale-105 group text-xs sm:text-sm font-bold"
       >
         <span className="w-2.5 h-2.5 rounded-full bg-white animate-ping" />
-        <span>WhatsApp Msaada / Help</span>
+        <span>{lang === "sw" ? "WhatsApp Msaada" : "WhatsApp Help"}</span>
       </a>
 
       <PublicFooter />

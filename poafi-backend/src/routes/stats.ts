@@ -263,5 +263,173 @@ router.get('/popular-packages', async (req, res) => {
   }
 });
 
+// 5. Smart Dashboard Notifications & Health Alerts
+router.get('/notifications', async (req, res) => {
+  try {
+    const isPlatformAdmin = req.user?.role === 'PLATFORM_ADMIN';
+    const tenantId = req.user?.tenantId;
+
+    if (!isPlatformAdmin && !tenantId) {
+      res.status(403).json({ error: 'Tenant access required' });
+      return;
+    }
+
+    const whereClause: any = {};
+    if (!isPlatformAdmin && tenantId) {
+      whereClause.tenantId = tenantId;
+    }
+
+    const now = new Date();
+    const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [
+      offlineRouters,
+      setupRequests,
+      pendingApplicationsCount,
+      pendingWithdrawalsCount,
+      todayPayments,
+    ] = await Promise.all([
+      prisma.router.findMany({
+        where: { ...whereClause, status: { in: ['OFFLINE', 'ERROR'] } },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          vendor: true,
+          tenant: { select: { name: true } },
+        },
+        take: 5,
+      }),
+      prisma.deviceSetupRequest.findMany({
+        where: {
+          ...whereClause,
+          status: isPlatformAdmin
+            ? { in: ['PENDING', 'IN_PROGRESS'] }
+            : { in: ['PENDING', 'IN_PROGRESS', 'COMPLETED'] },
+          updatedAt: { gte: sevenDaysAgo },
+        },
+        select: {
+          id: true,
+          deviceName: true,
+          deviceVendor: true,
+          status: true,
+          updatedAt: true,
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 4,
+      }),
+      isPlatformAdmin
+        ? prisma.operatorApplication.count({ where: { status: 'PENDING' } })
+        : Promise.resolve(0),
+      prisma.withdrawal.count({
+        where: { ...whereClause, status: 'PENDING' },
+      }),
+      prisma.payment.findMany({
+        where: {
+          ...whereClause,
+          status: { in: ['SUCCESS', 'COMPLETED'] },
+          createdAt: { gte: startOfToday },
+        },
+        select: { amount: true },
+      }),
+    ]);
+
+    type AlertItem = {
+      id: string;
+      severity: 'error' | 'warning' | 'info' | 'success';
+      titleSw: string;
+      titleEn: string;
+      messageSw: string;
+      messageEn: string;
+      href: string;
+      timestamp: string;
+    };
+
+    const alerts: AlertItem[] = [];
+
+    for (const r of offlineRouters) {
+      const ownerPrefix = isPlatformAdmin && r.tenant?.name ? `${r.tenant.name} — ` : '';
+      alerts.push({
+        id: `router-offline-${r.id}`,
+        severity: r.status === 'ERROR' ? 'error' : 'warning',
+        titleSw: r.status === 'ERROR' ? `Hitilafu ya Mtambo: ${r.name}` : `Mtambo Hauko Hewani: ${r.name}`,
+        titleEn: r.status === 'ERROR' ? `Gateway Error: ${r.name}` : `Gateway Offline: ${r.name}`,
+        messageSw: `${ownerPrefix}${r.vendor} haipatikani sasa. Kagua umeme, intaneti, au WireGuard.`,
+        messageEn: `${ownerPrefix}${r.vendor} is unreachable. Check power, ISP link, or WireGuard tunnel.`,
+        href: '/routers',
+        timestamp: now.toISOString(),
+      });
+    }
+
+    if (isPlatformAdmin && pendingApplicationsCount > 0) {
+      alerts.push({
+        id: 'pending-applications',
+        severity: 'warning',
+        titleSw: `Maombi ${pendingApplicationsCount} Yanasubiri Idhini`,
+        titleEn: `${pendingApplicationsCount} Pending Operator Application(s)`,
+        messageSw: 'Waendeshaji wapya wameomba kujiunga na mfumo wa PoaFi.',
+        messageEn: 'New hotspot operators are awaiting review and activation.',
+        href: '/applications',
+        timestamp: now.toISOString(),
+      });
+    }
+
+    for (const reqItem of setupRequests) {
+      const label = reqItem.deviceName || reqItem.deviceVendor || 'Hardware';
+      const isDone = reqItem.status === 'COMPLETED';
+      alerts.push({
+        id: `setup-${reqItem.id}`,
+        severity: isDone ? 'success' : 'info',
+        titleSw: isDone ? `Usanidi Umekamilika: ${label}` : `Ombi la Usanidi (${reqItem.status}): ${label}`,
+        titleEn: isDone ? `Device Setup Ready: ${label}` : `Device Setup (${reqItem.status}): ${label}`,
+        messageSw: isDone
+          ? 'Kifaa kimesanidiwa na kiko tayari kutumika.'
+          : 'Mchakato wa usanidi wa kifaa unaendelea.',
+        messageEn: isDone
+          ? 'Your hardware setup is complete and ready for service.'
+          : 'Assisted or self-setup hardware provisioning is active.',
+        href: '/device-setup',
+        timestamp: reqItem.updatedAt.toISOString(),
+      });
+    }
+
+    if (pendingWithdrawalsCount > 0) {
+      alerts.push({
+        id: 'pending-withdrawals',
+        severity: 'info',
+        titleSw: `Maombi ${pendingWithdrawalsCount} ya Kutoa Pesa`,
+        titleEn: `${pendingWithdrawalsCount} Pending Payout Request(s)`,
+        messageSw: 'Malipo ya kutoa fedha yanasubiri kukamilishwa.',
+        messageEn: 'Withdrawal payout request(s) currently awaiting processing.',
+        href: isPlatformAdmin ? '/billing' : '/payouts',
+        timestamp: now.toISOString(),
+      });
+    }
+
+    const todaySum = todayPayments.reduce((sum, p) => sum + p.amount, 0);
+    if (todayPayments.length > 0) {
+      alerts.push({
+        id: 'today-revenue',
+        severity: 'success',
+        titleSw: `Mapato ya Leo: TZS ${todaySum.toLocaleString()}`,
+        titleEn: `Today's Revenue: TZS ${todaySum.toLocaleString()}`,
+        messageSw: `Miamala ${todayPayments.length} iliyokamilika leo.`,
+        messageEn: `${todayPayments.length} completed transaction(s) recorded today.`,
+        href: '/billing',
+        timestamp: now.toISOString(),
+      });
+    }
+
+    res.json({
+      alerts: alerts.slice(0, 15),
+      count: alerts.length,
+    });
+  } catch (error) {
+    console.error('Notifications fetch error:', error);
+    res.status(500).json({ error: 'Failed to fetch notifications' });
+  }
+});
+
 export default router;
 

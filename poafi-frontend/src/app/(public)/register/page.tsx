@@ -167,7 +167,7 @@ export default function OperatorRegisterPage() {
             </div>
             <div className="flex justify-between text-gray-400">
               <span>{lang === "sw" ? "Nenosiri:" : "Password:"}</span>
-              <span className="text-green-400 font-mono">•••••••• (Uliyoweka / Yours)</span>
+              <span className="text-green-400 font-mono">•••••••• ({lang === "sw" ? "Uliyoweka" : "Yours"})</span>
             </div>
             <div className="flex justify-between text-gray-400">
               <span>{lang === "sw" ? "Eneo la Mwanzo (Site):" : "Initial Location (Site):"}</span>

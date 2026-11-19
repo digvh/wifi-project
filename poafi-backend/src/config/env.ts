@@ -46,6 +46,23 @@ const envSchema = z.object({
   WG_SERVER_ENDPOINT: z.string().optional(),
   WG_SERVER_PUBLIC_KEY: z.string().optional(),
   WG_SERVER_IP: z.string().optional(),
+
+  // Shared hosting (cPanel / Passenger) support
+  // Number of reverse-proxy hops to trust for client IPs (Passenger/Apache/Cloudflare = 1).
+  TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
+  // Set to false on shared hosting where processes are put to sleep; use the cron endpoint instead.
+  BACKGROUND_JOBS: z.preprocess((val) => val === undefined || val === '' ? true : val === 'true' || val === true, z.boolean()).default(true),
+  // Secret for GET/POST /api/internal/cron/run (called by cPanel Cron Jobs). Min 32 chars.
+  CRON_SECRET: z.string().min(32).optional(),
+  // Database pool size (keep low, e.g. 5, on shared hosting / free cloud Postgres)
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(5),
+  // Enable TLS for remote PostgreSQL hosts (auto-detected if DATABASE_URL has sslmode=require)
+  DB_SSL: z.preprocess((val) => val === 'true' || val === true, z.boolean()).default(false),
+  // Cookie settings for same-domain or cross-domain shared hosting deployments
+  COOKIE_SAME_SITE: z.enum(['lax', 'strict', 'none']).default('lax'),
+  COOKIE_DOMAIN: z.string().optional(),
+  // Optional path to static exported frontend (defaults to ./public or ../poafi-frontend/out if present)
+  STATIC_FRONTEND_DIR: z.string().optional(),
 });
 
 export const env = envSchema.parse(process.env);

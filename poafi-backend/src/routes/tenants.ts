@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { prisma } from '../config/database';
 import { requireAuth, requirePlatformAdmin } from '../middleware/auth';
-import { hashPassword, comparePassword } from '../utils/auth';
+import { hashPassword, comparePassword, SESSION_COOKIE_NAME, sessionCookieOptions } from '../utils/auth';
 import { validate } from '../middleware/validate';
 import { createTenantSchema, updateTenantSchema, createTenantLoginSchema } from '../validators';
 
@@ -113,18 +113,59 @@ router.patch('/settings', requireAuth, async (req, res) => {
       res.status(403).json({ error: 'Only operators can update their own settings' });
       return;
     }
-    const { paymentMode, name } = req.body;
+    const { paymentMode, name, portalLogoUrl, portalColor, portalTagline, supportPhone } = req.body;
     if (paymentMode && !['MOBILE_ONLY', 'VOUCHER_ONLY', 'MIXED'].includes(paymentMode)) {
       res.status(400).json({ error: 'Invalid payment mode. Must be MOBILE_ONLY, VOUCHER_ONLY, or MIXED.' });
       return;
+    }
+
+    let safeLogoUrl: string | null | undefined = undefined;
+    if (portalLogoUrl !== undefined) {
+      const trimmed = String(portalLogoUrl || '').trim();
+      if (!trimmed) {
+        safeLogoUrl = null;
+      } else {
+        try {
+          const parsed = new URL(trimmed);
+          if (!['https:', 'http:'].includes(parsed.protocol)) {
+            res.status(400).json({ error: 'Logo URL must start with https:// or http://' });
+            return;
+          }
+          safeLogoUrl = trimmed.slice(0, 400);
+        } catch {
+          res.status(400).json({ error: 'Invalid Logo URL' });
+          return;
+        }
+      }
+    }
+
+    let safeColor: string | null | undefined = undefined;
+    if (portalColor !== undefined) {
+      const trimmed = String(portalColor || '').trim();
+      if (!trimmed) {
+        safeColor = null;
+      } else if (!/^#[0-9a-fA-F]{6}$/.test(trimmed)) {
+        res.status(400).json({ error: 'Portal color must be a 6-digit hex code like #00f3ff' });
+        return;
+      } else {
+        safeColor = trimmed;
+      }
     }
 
     const updated = await prisma.tenant.update({
       where: { id: req.user.tenantId },
       data: {
         ...(paymentMode && { paymentMode }),
-        ...(name && { name }),
-      },
+        ...(name && { name: String(name).trim().slice(0, 100) }),
+        ...(safeLogoUrl !== undefined && { portalLogoUrl: safeLogoUrl }),
+        ...(safeColor !== undefined && { portalColor: safeColor }),
+        ...(portalTagline !== undefined && {
+          portalTagline: String(portalTagline || '').trim().slice(0, 120) || null,
+        }),
+        ...(supportPhone !== undefined && {
+          supportPhone: String(supportPhone || '').trim().slice(0, 30) || null,
+        }),
+      } as any,
     });
 
     res.json({ message: 'Settings updated successfully', tenant: updated });
@@ -166,6 +207,7 @@ router.delete('/my-account', requireAuth, async (req, res) => {
     const tenantId = req.user.tenantId;
     await deleteTenantCascade(tenantId);
 
+    res.clearCookie(SESSION_COOKIE_NAME, sessionCookieOptions());
     res.json({
       message: 'Akaunti yako na mifumo yote ya Wi-Fi imefutwa kikamilifu / Your account and all associated hotspot data have been permanently deleted',
     });

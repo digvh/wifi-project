@@ -5,7 +5,16 @@ import { encryptSecret, decryptSecret } from '../../utils/crypto';
 import { RouterAdapterFactory } from '../network';
 import { AzamPayGateway, WebhookNotConfiguredError } from './AzamPayGateway';
 import { SmsService } from '../sms/SmsService';
-import { CheckoutRequest, CheckoutResponse, WebhookResult } from './types';
+import { CheckoutRequest, CheckoutResponse, IPaymentGateway, WebhookResult } from './types';
+import {
+  CustomMerchantGateway,
+  PaymentGatewayProviderId,
+  decryptStoredCredentials,
+} from './PaymentGatewayCatalog';
+import {
+  getSubscriptionPlan,
+  getTenantSubscriptionSummary,
+} from './SubscriptionPlans';
 
 export type PaymentAccessMode = 'RADIUS' | 'NATIVE';
 
@@ -14,22 +23,78 @@ export class PaymentService {
     return crypto.createHash('sha256').update(token).digest('hex');
   }
 
-  private static async getGatewayForTenant(tenantId: string): Promise<AzamPayGateway> {
+  private static async getGatewayForTenant(tenantId: string): Promise<IPaymentGateway> {
+    const gatewaySettings = await prisma.paymentGatewaySetting.findMany({
+      where: { tenantId },
+    });
+
+    const enabledCustom = gatewaySettings.filter(
+      (g) => g.isEnabled && g.provider !== 'POAFI_PAY' && g.encryptedCredentials,
+    );
+    const poafiSetting = gatewaySettings.find((g) => g.provider === 'POAFI_PAY');
+    const isPoafiPayEnabled = poafiSetting ? poafiSetting.isEnabled : true;
+
+    if (enabledCustom.length > 0) {
+      const sub = await getTenantSubscriptionSummary(tenantId);
+      if (!sub.canUseCustomGateways) {
+        if (!isPoafiPayEnabled) {
+          throw new Error(
+            'This hotspot uses a custom payment gateway, but its monthly operator subscription is inactive or requires a multi-site upgrade.',
+          );
+        }
+      } else {
+        // Prefer AZAMPAY if enabled, otherwise the first enabled custom provider
+        const customSetting =
+          enabledCustom.find((g) => g.provider === 'AZAMPAY') || enabledCustom[0];
+        const creds = decryptStoredCredentials(customSetting.encryptedCredentials);
+        const envMode = (customSetting.environment as 'PRODUCTION' | 'SANDBOX') || 'PRODUCTION';
+
+        if (customSetting.provider === 'AZAMPAY' && creds.clientId && creds.clientSecret) {
+          return new AzamPayGateway({
+            appName: creds.appName || 'POAFI_OPERATOR',
+            clientId: creds.clientId,
+            apiKey: creds.apiKey || '',
+            clientSecret: creds.clientSecret,
+            isLive: envMode === 'PRODUCTION',
+            allowSimulation: env.ALLOW_PAYMENT_SIMULATION,
+            nodeEnv: env.NODE_ENV,
+          });
+        }
+
+        if (customSetting.provider !== 'AZAMPAY') {
+          return new CustomMerchantGateway(
+            customSetting.provider as PaymentGatewayProviderId,
+            envMode,
+            creds,
+          );
+        }
+      }
+    }
+
+    if (gatewaySettings.length > 0 && !isPoafiPayEnabled && enabledCustom.length === 0) {
+      throw new Error('Mobile money payments are currently turned off for this hotspot');
+    }
+
     const config = await prisma.paymentConfig.findUnique({ where: { tenantId } });
 
-    if (config && config.encryptedApiKey && config.encryptedSecret) {
-      try {
-        const apiKey = decryptSecret(config.encryptedApiKey);
-        const secret = decryptSecret(config.encryptedSecret);
-        return new AzamPayGateway({
-          appName: config.appName || undefined,
-          clientId: config.clientId || undefined,
-          apiKey,
-          clientSecret: secret,
-          isLive: config.isLive,
-        });
-      } catch (e) {
-        console.error('Failed to decrypt payment credentials:', e);
+    if (config && config.encryptedSecret) {
+      const sub = await getTenantSubscriptionSummary(tenantId);
+      if (sub.canUseCustomGateways) {
+        try {
+          const apiKey = config.encryptedApiKey ? decryptSecret(config.encryptedApiKey) : '';
+          const secret = decryptSecret(config.encryptedSecret);
+          return new AzamPayGateway({
+            appName: config.appName || 'POAFI_OPERATOR',
+            clientId: config.clientId || undefined,
+            apiKey,
+            clientSecret: secret,
+            isLive: config.isLive,
+            allowSimulation: env.ALLOW_PAYMENT_SIMULATION,
+            nodeEnv: env.NODE_ENV,
+          });
+        } catch (e) {
+          console.error('Failed to decrypt payment credentials:', e);
+        }
       }
     }
 
@@ -40,10 +105,16 @@ export class PaymentService {
         apiKey: env.AZAMPAY_API_KEY || '',
         clientSecret: env.AZAMPAY_CLIENT_SECRET,
         isLive: env.AZAMPAY_IS_LIVE,
+        allowSimulation: env.ALLOW_PAYMENT_SIMULATION,
+        nodeEnv: env.NODE_ENV,
       });
     }
 
-    return new AzamPayGateway();
+    return new AzamPayGateway({
+      allowSimulation: env.ALLOW_PAYMENT_SIMULATION,
+      nodeEnv: env.NODE_ENV,
+      isLive: env.AZAMPAY_IS_LIVE,
+    });
   }
 
   private static async getAccessModeForTenant(tenantId: string): Promise<PaymentAccessMode> {
@@ -62,6 +133,12 @@ export class PaymentService {
 
     if (!pkg) throw new Error('Selected Wi-Fi package not found');
     if (pkg.tenantId !== req.tenantId) throw new Error('Package does not belong to this operator');
+    if (pkg.tenant?.paymentMode === 'VOUCHER_ONLY') {
+      throw new Error('This hotspot is currently configured for voucher codes only');
+    }
+    if (pkg.isOffer && !pkg.offerActive) throw new Error('This promotional offer is currently paused');
+    if (pkg.isOffer && pkg.offerEndsAt && pkg.offerEndsAt < new Date()) throw new Error('This promotional offer has expired');
+    if (pkg.priceTzs <= 0) throw new Error('Free trial packages do not require payment');
 
     const gateway = await this.getGatewayForTenant(req.tenantId);
     const formattedPhone = gateway.formatTzPhone(req.phoneNumber);
@@ -236,6 +313,18 @@ export class PaymentService {
 
     if (!result.reference) throw new Error('Webhook missing payment reference');
 
+    if (result.reference.startsWith('SUB-')) {
+      if (result.status === 'SUCCESS') {
+        await this.fulfillSubscriptionPayment(result.reference, result.externalId);
+        return { success: true, message: 'Operator subscription activated successfully' };
+      }
+      await (prisma as any).subscriptionPayment.updateMany({
+        where: { reference: result.reference, status: 'PENDING' },
+        data: { status: 'FAILED', externalId: result.externalId },
+      });
+      return { success: true, message: 'Subscription payment marked as failed' };
+    }
+
     if (result.status === 'SUCCESS') {
       await this.fulfillPayment(result.reference, result.externalId, result.amount);
       return { success: true, message: 'Payment fulfilled successfully' };
@@ -246,6 +335,50 @@ export class PaymentService {
       data: { status: 'FAILED', externalId: result.externalId },
     });
     return { success: true, message: 'Payment marked as failed' };
+  }
+
+  static async fulfillSubscriptionPayment(reference: string, externalId?: string) {
+    const subPay: any = await (prisma as any).subscriptionPayment.findUnique({
+      where: { reference },
+      include: { tenant: true },
+    });
+    if (!subPay) throw new Error(`Subscription payment '${reference}' not found`);
+    if (subPay.status === 'SUCCESS') return subPay;
+
+    const plan = getSubscriptionPlan(subPay.planId);
+    if (!plan) throw new Error(`Invalid subscription plan '${subPay.planId}'`);
+
+    const now = new Date();
+    const currentExpiry =
+      subPay.tenant?.subscriptionExpiresAt && new Date(subPay.tenant.subscriptionExpiresAt) > now
+        ? new Date(subPay.tenant.subscriptionExpiresAt)
+        : now;
+    const months = Math.max(1, Number(subPay.months) || 1);
+    const nextExpiry = new Date(currentExpiry.getTime() + months * 30 * 24 * 60 * 60 * 1000);
+
+    await prisma.$transaction([
+      (prisma as any).subscriptionPayment.update({
+        where: { id: subPay.id },
+        data: {
+          status: 'SUCCESS',
+          externalId: externalId || subPay.externalId,
+          periodStart: currentExpiry,
+          periodEnd: nextExpiry,
+          completedAt: now,
+        },
+      }),
+      (prisma.tenant as any).update({
+        where: { id: subPay.tenantId },
+        data: {
+          subscriptionPlan: plan.id,
+          subscriptionStatus: 'ACTIVE',
+          subscriptionExpiresAt: nextExpiry,
+          subscriptionMaxSites: plan.maxSites,
+        },
+      }),
+    ]);
+
+    return (prisma as any).subscriptionPayment.findUnique({ where: { id: subPay.id } });
   }
 
   static async getPaymentStatus(paymentId: string, accessToken: string) {
@@ -306,6 +439,19 @@ export class PaymentService {
       return { provisioned: false, error: 'No ONLINE router available' };
     }
 
+    const rAny: any = routerDevice;
+    const isHttpsSyncAlive =
+      rAny.discoveredAt &&
+      Date.now() - new Date(rAny.discoveredAt).getTime() <= 5 * 60 * 1000;
+    const skipDirectTcp =
+      !routerDevice.host ||
+      routerDevice.host === '0.0.0.0' ||
+      (routerDevice.host.startsWith('10.8.0.') && !env.WG_SERVER_ENDPOINT);
+
+    if (skipDirectTcp && isHttpsSyncAlive) {
+      return { provisioned: true };
+    }
+
     try {
       const routerPassword = decryptSecret(routerDevice.encryptedPassword);
       const adapter = RouterAdapterFactory.getAdapter(routerDevice.vendor, {
@@ -325,6 +471,9 @@ export class PaymentService {
       });
       return { provisioned: true };
     } catch (err: any) {
+      if (isHttpsSyncAlive) {
+        return { provisioned: true };
+      }
       return { provisioned: false, error: err?.message || 'Router provisioning failed' };
     }
   }

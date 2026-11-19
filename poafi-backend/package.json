@@ -6,6 +6,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
     "start": "node dist/server.js",
+    "db:init": "node scripts/db-init.js",
     "test": "tsx --test src/services/payment/paymentSafety.test.ts"
   },
   "dependencies": {

@@ -17,16 +17,103 @@ import {
   Zap,
   Clock,
   Radio,
-  Lock
+  Lock,
+  Phone
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { useLanguage } from "@/context/LanguageContext";
 
 const PROVIDERS = [
-  { id: "MPESA", name: "M-Pesa", badge: "Vodacom", color: "from-red-600 to-rose-700", ring: "ring-red-500/50" },
-  { id: "TIGOPESA", name: "Tigo Pesa", badge: "Tigo", color: "from-blue-600 to-indigo-700", ring: "ring-blue-500/50" },
-  { id: "AIRTEL", name: "Airtel Money", badge: "Airtel", color: "from-red-500 to-red-700", ring: "ring-red-500/50" },
-  { id: "HALOPESA", name: "Halopesa", badge: "Halotel", color: "from-orange-500 to-amber-600", ring: "ring-orange-500/50" },
+  {
+    id: "MPESA",
+    name: "M-Pesa",
+    badge: "Vodacom",
+    brandHex: "#E60000",
+    activeClass: "bg-[#E60000]/20 border-[#E60000] text-white shadow-[0_0_20px_rgba(230,0,0,0.35)]",
+    idleClass: "bg-[#E60000]/5 border-[#E60000]/25 text-gray-200 hover:border-[#E60000]/60 hover:bg-[#E60000]/10",
+    buttonGradient: "from-[#E60000] to-[#B30000] shadow-[#E60000]/30",
+    pillClass: "bg-[#E60000]/15 border-[#E60000]/40 text-red-200",
+  },
+  {
+    id: "TIGOPESA",
+    name: "Tigo Pesa",
+    badge: "Tigo",
+    brandHex: "#00377B",
+    activeClass: "bg-[#00377B]/50 border-[#00AEEF] text-white shadow-[0_0_20px_rgba(0,174,239,0.35)]",
+    idleClass: "bg-[#00377B]/20 border-[#00AEEF]/25 text-gray-200 hover:border-[#00AEEF]/60 hover:bg-[#00377B]/35",
+    buttonGradient: "from-[#0057B8] to-[#00377B] shadow-[#00AEEF]/30",
+    pillClass: "bg-[#00377B]/40 border-[#00AEEF]/40 text-sky-200",
+  },
+  {
+    id: "AIRTEL",
+    name: "Airtel Money",
+    badge: "Airtel",
+    brandHex: "#ED1C24",
+    activeClass: "bg-[#ED1C24]/20 border-[#ED1C24] text-white shadow-[0_0_20px_rgba(237,28,36,0.35)]",
+    idleClass: "bg-[#ED1C24]/5 border-[#ED1C24]/25 text-gray-200 hover:border-[#ED1C24]/60 hover:bg-[#ED1C24]/10",
+    buttonGradient: "from-[#ED1C24] to-[#B80D14] shadow-[#ED1C24]/30",
+    pillClass: "bg-[#ED1C24]/15 border-[#ED1C24]/40 text-red-200",
+  },
+  {
+    id: "HALOPESA",
+    name: "Halopesa",
+    badge: "Halotel",
+    brandHex: "#F36F21",
+    activeClass: "bg-[#F36F21]/20 border-[#F36F21] text-white shadow-[0_0_20px_rgba(243,111,33,0.35)]",
+    idleClass: "bg-[#F36F21]/5 border-[#F36F21]/25 text-gray-200 hover:border-[#F36F21]/60 hover:bg-[#F36F21]/10",
+    buttonGradient: "from-[#F36F21] to-[#D9530A] shadow-[#F36F21]/30",
+    pillClass: "bg-[#F36F21]/15 border-[#F36F21]/40 text-orange-200",
+  },
 ];
+
+function ProviderLogo({ id, size = 34 }: { id: string; size?: number }) {
+  if (id === "MPESA") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 40 40" className="shrink-0 rounded-xl shadow-sm" aria-hidden="true">
+        <rect width="40" height="40" rx="10" fill="#E60000" />
+        <circle cx="20" cy="20" r="13" fill="#FFFFFF" />
+        <path d="M21.5 11.5c-4.7 0-8.2 3.4-8.2 8.1 0 4.5 3.3 7.9 7.8 7.9 4.3 0 7.6-3.2 7.6-7.6 0-2.9-1.6-5.2-4.1-6.2l.8-2.2h-3.9zm-.4 12.2c-2.3 0-4-1.7-4-4.1s1.7-4.1 4-4.1 4 1.7 4 4.1-1.7 4.1-4 4.1z" fill="#E60000" />
+      </svg>
+    );
+  }
+  if (id === "TIGOPESA") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 40 40" className="shrink-0 rounded-xl shadow-sm" aria-hidden="true">
+        <rect width="40" height="40" rx="10" fill="#00377B" />
+        <circle cx="14" cy="15" r="2.6" fill="#FFD100" />
+        <circle cx="26" cy="15" r="2.6" fill="#FFD100" />
+        <path d="M11 22c2.2 4.5 6.1 6.5 9 6.5s6.8-2 9-6.5" fill="none" stroke="#FFD100" strokeWidth="3.2" strokeLinecap="round" />
+      </svg>
+    );
+  }
+  if (id === "AIRTEL") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 40 40" className="shrink-0 rounded-xl shadow-sm" aria-hidden="true">
+        <rect width="40" height="40" rx="10" fill="#ED1C24" />
+        <path d="M26.8 25.5c-2.6 2.3-7.7 3.8-12 2.2-3.4-1.3-4.6-4.7-2.6-7.4 2.2-2.9 7.5-4.3 11.6-6.9 1.9-1.2 2.9-2.8 2.6-4.4 2.5 2.1 3.7 5.5 2.4 8.7-1.1 2.7-4.5 4.4-8.2 5.4-2.1.6-3.7 1.3-3.5 2.5.2 1.2 2.3 1.7 5 .9 1.9-.5 3.6-1.4 4.7-1z" fill="#FFFFFF" />
+      </svg>
+    );
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 40 40" className="shrink-0 rounded-xl shadow-sm" aria-hidden="true">
+      <rect width="40" height="40" rx="10" fill="#F36F21" />
+      <path d="M12 11v18M28 11v18M12 20h16" stroke="#FFFFFF" strokeWidth="3.6" strokeLinecap="round" />
+      <circle cx="20" cy="12.5" r="2.2" fill="#FFFFFF" />
+    </svg>
+  );
+}
+
+function formatPackageDuration(mins: number, lang: "sw" | "en"): string {
+  if (mins >= 1440) {
+    const days = Math.round(mins / 1440);
+    return `${days} ${lang === "sw" ? "Siku" : "Days"}`;
+  }
+  if (mins >= 60) {
+    const hrs = Number((mins / 60).toFixed(1));
+    return `${hrs} ${lang === "sw" ? "Saa" : "Hrs"}`;
+  }
+  return `${mins} ${lang === "sw" ? "Dakika" : "Min"}`;
+}
 
 const I18N = {
   sw: {
@@ -98,12 +185,23 @@ const I18N = {
 function PortalContent() {
   const searchParams = useSearchParams();
   const tenantSlug = searchParams.get("tenant") || "tanga";
+  const qrVoucherParam = searchParams.get("voucher") || searchParams.get("code") || "";
 
-  const [lang, setLang] = useState<"sw" | "en">("sw");
+  const { lang, setLang } = useLanguage();
   const [paymentMode, setPaymentMode] = useState<"MOBILE_ONLY" | "VOUCHER_ONLY" | "MIXED">("MIXED");
   const [activeTab, setActiveTab] = useState<"buy" | "voucher">("buy");
   const [packages, setPackages] = useState<any[]>([]);
+  const [claimedOfferIds, setClaimedOfferIds] = useState<string[]>([]);
+  const [claimingOfferId, setClaimingOfferId] = useState<string | null>(null);
+  const [deviceId, setDeviceId] = useState<string>("");
   const [operatorName, setOperatorName] = useState("PoaFi Hotspot");
+  const [branding, setBranding] = useState<{
+    logoUrl: string | null;
+    primaryColor: string;
+    tagline: string | null;
+    supportPhone: string | null;
+  }>({ logoUrl: null, primaryColor: "#00f3ff", tagline: null, supportPhone: null });
+  const [logoError, setLogoError] = useState(false);
   const [loadingPackages, setLoadingPackages] = useState(true);
 
   const [selectedPackageId, setSelectedPackageId] = useState<string>("");
@@ -123,19 +221,66 @@ function PortalContent() {
   const t = I18N[lang];
 
   useEffect(() => {
+    if (qrVoucherParam && qrVoucherParam.trim()) {
+      setVoucherCode(qrVoucherParam.trim().toUpperCase());
+      setActiveTab("voucher");
+    }
+  }, [qrVoucherParam]);
+
+  useEffect(() => {
+    let localDevId = "";
+    try {
+      localDevId = localStorage.getItem("poafi_device_id") || "";
+      if (!localDevId) {
+        localDevId = typeof crypto !== "undefined" && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `dev-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+        localStorage.setItem("poafi_device_id", localDevId);
+      }
+      setDeviceId(localDevId);
+    } catch {
+      // ignore storage errors
+    }
+
     async function loadPackages() {
       try {
         setLoadingPackages(true);
-        const res = await apiFetch(`/packages/public/${tenantSlug}`);
-        setPackages(res.packages || []);
+        const query = localDevId ? `?deviceId=${encodeURIComponent(localDevId)}` : "";
+        const res = await apiFetch(`/packages/public/${tenantSlug}${query}`);
+        const loadedPackages = res.packages || [];
+        setPackages(loadedPackages);
+
+        let localClaimed: string[] = [];
+        try {
+          localClaimed = JSON.parse(localStorage.getItem(`poafi_claimed_${tenantSlug}`) || "[]");
+        } catch {
+          localClaimed = [];
+        }
+        setClaimedOfferIds(Array.from(new Set([...(res.claimedOfferIds || []), ...localClaimed])));
+
         if (res.operator) setOperatorName(res.operator);
+        if (res.branding) {
+          setBranding({
+            logoUrl: res.branding.logoUrl || null,
+            primaryColor: res.branding.primaryColor || "#00f3ff",
+            tagline: res.branding.tagline || null,
+            supportPhone: res.branding.supportPhone || null,
+          });
+          setLogoError(false);
+        }
         if (res.paymentMode) {
           setPaymentMode(res.paymentMode);
           if (res.paymentMode === "VOUCHER_ONLY") setActiveTab("voucher");
-          if (res.paymentMode === "MOBILE_ONLY") setActiveTab("buy");
+          else if (res.paymentMode === "MOBILE_ONLY") setActiveTab("buy");
+          else if (qrVoucherParam && qrVoucherParam.trim()) setActiveTab("voucher");
         }
-        if (res.packages && res.packages.length > 0) {
-          setSelectedPackageId(res.packages[0].id);
+        const paidPackages = loadedPackages.filter(
+          (p: any) => !(p.isOffer && p.offerType === "FIRST_TIME_FREE" && Number(p.priceTzs) === 0)
+        );
+        if (paidPackages.length > 0) {
+          setSelectedPackageId(paidPackages[0].id);
+        } else if (loadedPackages.length > 0) {
+          setSelectedPackageId(loadedPackages[0].id);
         }
       } catch (err: any) {
         console.error("Failed to load packages:", err);
@@ -145,6 +290,50 @@ function PortalContent() {
     }
     loadPackages();
   }, [tenantSlug]);
+
+  const handleClaimFreeOffer = async (pkg: any) => {
+    setError("");
+    setClaimingOfferId(pkg.id);
+    try {
+      const res = await apiFetch("/portal/claim-offer", {
+        method: "POST",
+        body: JSON.stringify({
+          tenantSlug,
+          packageId: pkg.id,
+          deviceId: deviceId || undefined,
+        }),
+      });
+      const updatedClaims = Array.from(new Set([...claimedOfferIds, pkg.id]));
+      setClaimedOfferIds(updatedClaims);
+      try {
+        localStorage.setItem(`poafi_claimed_${tenantSlug}`, JSON.stringify(updatedClaims));
+      } catch {
+        // ignore storage errors
+      }
+      setPaymentStatus({
+        status: "SUCCESS",
+        voucherCode: res.voucherCode,
+        accessMode: res.requiresDeviceLogin ? "RADIUS" : "NATIVE",
+        durationMinutes: res.durationMinutes || pkg.durationMinutes,
+      });
+    } catch (err: any) {
+      if (String(err.message || "").toLowerCase().includes("already claimed")) {
+        const updatedClaims = Array.from(new Set([...claimedOfferIds, pkg.id]));
+        setClaimedOfferIds(updatedClaims);
+        try {
+          localStorage.setItem(`poafi_claimed_${tenantSlug}`, JSON.stringify(updatedClaims));
+        } catch {
+          // ignore
+        }
+      }
+      setError(
+        err.message ||
+          (lang === "sw" ? "Imeshindikana kuwasha ofa ya bure." : "Failed to claim free offer.")
+      );
+    } finally {
+      setClaimingOfferId(null);
+    }
+  };
 
   const handleCheckout = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -164,7 +353,7 @@ function PortalContent() {
       setCheckoutData(res);
       setPolling(true);
     } catch (err: any) {
-      setError(err.message || "Failed to initiate payment");
+      setError(err.message || (lang === "sw" ? "Imeshindikana kuanzisha malipo" : "Failed to initiate payment"));
     } finally {
       setCheckoutLoading(false);
     }
@@ -225,7 +414,7 @@ function PortalContent() {
       });
       setRedeemSuccess(res);
     } catch (err: any) {
-      setError(err.message || "Vocha si sahihi / Invalid voucher code");
+      setError(err.message || (lang === "sw" ? "Vocha si sahihi" : "Invalid voucher code"));
     } finally {
       setRedeemLoading(false);
     }
@@ -237,24 +426,30 @@ function PortalContent() {
     setTimeout(() => setCopiedCode(false), 2500);
   };
 
-  const selectedPkg = packages.find((p) => p.id === selectedPackageId);
+  const freeOffers = packages.filter(
+    (p) => p.isOffer && p.offerType === "FIRST_TIME_FREE" && Number(p.priceTzs) === 0
+  );
+  const purchasablePackages = packages.filter(
+    (p) => !(p.isOffer && p.offerType === "FIRST_TIME_FREE" && Number(p.priceTzs) === 0)
+  );
+  const selectedPkg = purchasablePackages.find((p) => p.id === selectedPackageId);
   const activeProviderObj = PROVIDERS.find((p) => p.id === selectedProvider) || PROVIDERS[0];
   const isRadiusMode = paymentStatus?.accessMode === "RADIUS" || redeemSuccess?.requiresDeviceLogin === true;
   const hasSuccess = Boolean(paymentStatus || redeemSuccess);
   const displayCode = paymentStatus?.voucherCode || voucherCode;
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 bg-[#050510] text-white relative overflow-hidden">
+    <div className="min-h-screen flex items-center justify-center p-3 sm:p-4 bg-[#050510] text-white relative overflow-hidden">
       {/* Background Ambient Cyber Glows */}
       <div className="absolute top-1/4 -left-20 w-80 h-80 bg-[#00f3ff]/15 rounded-full blur-3xl pointer-events-none animate-pulse" />
       <div className="absolute bottom-1/4 -right-20 w-80 h-80 bg-[#9d00ff]/15 rounded-full blur-3xl pointer-events-none animate-pulse" />
 
-      <div className="w-full max-w-lg space-y-6 relative z-10">
+      <div className="w-full max-w-lg space-y-5 sm:space-y-6 relative z-10">
         {/* Language & Network Header */}
-        <div className="flex justify-between items-center text-xs">
+        <div className="flex flex-wrap justify-between items-center gap-2 text-xs">
           <div className="flex items-center gap-1.5 text-gray-400">
             <Radio size={14} className="text-[#00f3ff] animate-pulse" />
-            <span className="font-mono text-[11px]">HOTSPOT ONLINE</span>
+            <span className="font-mono text-[11px]">{lang === "sw" ? "HOTSPOT IKO HEWANI" : "HOTSPOT ONLINE"}</span>
           </div>
 
           <div className="flex items-center gap-1.5 bg-white/5 border border-white/10 p-1 rounded-full">
@@ -283,14 +478,40 @@ function PortalContent() {
           animate={{ opacity: 1, y: 0 }}
           className="text-center space-y-2"
         >
-          <div className="w-16 h-16 bg-[#00f3ff]/15 rounded-2xl flex items-center justify-center mx-auto border border-[#00f3ff]/40 shadow-[0_0_30px_rgba(0,243,255,0.25)] relative">
-            <Wifi className="w-8 h-8 text-[#00f3ff]" />
+          <div
+            className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto border relative overflow-hidden"
+            style={{
+              backgroundColor: `${branding.primaryColor}20`,
+              borderColor: `${branding.primaryColor}66`,
+              boxShadow: `0 0 30px ${branding.primaryColor}40`,
+            }}
+          >
+            {branding.logoUrl && !logoError ? (
+              <img
+                src={branding.logoUrl}
+                alt={operatorName}
+                onError={() => setLogoError(true)}
+                className="w-full h-full object-contain p-1.5"
+              />
+            ) : (
+              <Wifi className="w-8 h-8" style={{ color: branding.primaryColor }} />
+            )}
             <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-[#050510] animate-ping" />
             <span className="absolute -top-1 -right-1 w-3.5 h-3.5 bg-green-500 rounded-full border-2 border-[#050510]" />
           </div>
           <h1 className="text-3xl font-black tracking-tight text-white">{operatorName}</h1>
           <p className="text-xs text-gray-400">
-            {t.welcome} <span className="text-[#00f3ff] font-bold">{operatorName}</span> • {t.speed}
+            {branding.tagline ? (
+              <span className="font-medium text-gray-200">{branding.tagline}</span>
+            ) : (
+              <>
+                {t.welcome}{" "}
+                <span className="font-bold" style={{ color: branding.primaryColor }}>
+                  {operatorName}
+                </span>{" "}
+                • {t.speed}
+              </>
+            )}
           </p>
         </motion.div>
 
@@ -352,10 +573,12 @@ function PortalContent() {
               {isRadiusMode ? (
                 <div className="text-xs text-gray-300 bg-amber-500/10 border border-amber-500/30 p-3.5 rounded-xl text-left space-y-1">
                   <p className="font-bold text-amber-400 flex items-center gap-1.5">
-                    <Lock size={14} /> Kuingia Kwenye Kifaa (Device Sign-In)
+                    <Lock size={14} /> {lang === "sw" ? "Kuingia Kwenye Kifaa" : "Device Sign-In"}
                   </p>
                   <p className="text-[11px] text-gray-300">
-                    Fungua ukurasa wa sign-in wa simu yako kwenye Wi-Fi hii na uweke kodi hiyo ya tarakimu 8.
+                    {lang === "sw"
+                      ? "Fungua ukurasa wa kuingia wa simu yako kwenye Wi-Fi hii na uweke kodi hiyo ya tarakimu 8."
+                      : "Open your device's Wi-Fi sign-in prompt and enter this 8-character voucher code."}
                   </p>
                 </div>
               ) : (
@@ -373,7 +596,12 @@ function PortalContent() {
 
         {/* MAIN INTERFACE (TABS & FORMS) */}
         {!hasSuccess && (
-          <div className="glass-panel p-6 space-y-6 rounded-3xl border border-white/10 shadow-2xl">
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, ease: "easeOut" }}
+            className="glass-panel p-6 space-y-6 rounded-3xl border border-white/10 shadow-2xl"
+          >
             {/* Mode Tabs */}
             {paymentMode === "MIXED" && !checkoutData && (
               <div className="grid grid-cols-2 gap-2 bg-white/5 p-1 rounded-2xl border border-white/10">
@@ -410,40 +638,136 @@ function PortalContent() {
               </div>
             )}
 
+            <AnimatePresence mode="wait">
             {/* TAB 1: BUY VIA MOBILE MONEY */}
             {activeTab === "buy" && paymentMode !== "VOUCHER_ONLY" && (
-              <div>
+              <motion.div
+                key="tab-buy"
+                initial={{ opacity: 0, x: -12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 12 }}
+                transition={{ duration: 0.22 }}
+              >
                 {!checkoutData ? (
                   <form onSubmit={handleCheckout} className="space-y-5">
+                    {/* Free First-Time Offer(s) */}
+                    {!loadingPackages && freeOffers.length > 0 && (
+                      <div className="space-y-2.5">
+                        {freeOffers.map((offer) => {
+                          const alreadyClaimed = claimedOfferIds.includes(offer.id);
+                          return (
+                            <motion.div
+                              key={offer.id}
+                              initial={{ opacity: 0, y: 10 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              className={`p-4 rounded-2xl border transition-all ${
+                                alreadyClaimed
+                                  ? "bg-white/5 border-white/10 opacity-70"
+                                  : "bg-gradient-to-r from-emerald-500/20 via-[#00f3ff]/10 to-transparent border-emerald-400/50 shadow-[0_0_25px_rgba(16,185,129,0.2)]"
+                              }`}
+                            >
+                              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                                <div>
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/25 text-emerald-300 border border-emerald-400/40 mb-1.5">
+                                    <Sparkles size={10} />
+                                    {lang === "sw" ? "OFA YA BURE MARA YA KWANZA" : "FREE FIRST-TIME OFFER"}
+                                  </span>
+                                  <p className="font-black text-base text-white">{offer.name}</p>
+                                  <p className="text-xs text-gray-300 mt-0.5 flex items-center gap-1.5">
+                                    <Clock size={12} className="text-emerald-400" />
+                                    <span>
+                                      {formatPackageDuration(offer.durationMinutes, lang)} •{" "}
+                                      {lang === "sw"
+                                        ? "Bure siku ya kwanza tu (mara moja)"
+                                        : "Free once on your first visit"}
+                                    </span>
+                                  </p>
+                                </div>
+                                <motion.button
+                                  whileHover={alreadyClaimed ? undefined : { scale: 1.03 }}
+                                  whileTap={alreadyClaimed ? undefined : { scale: 0.97 }}
+                                  type="button"
+                                  disabled={alreadyClaimed || claimingOfferId === offer.id}
+                                  onClick={() => handleClaimFreeOffer(offer)}
+                                  className={`px-4 py-2.5 rounded-xl text-xs font-black shrink-0 transition-all ${
+                                    alreadyClaimed
+                                      ? "bg-white/10 text-gray-400 cursor-not-allowed"
+                                      : "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-lg shadow-emerald-500/25 hover:opacity-95"
+                                  }`}
+                                >
+                                  {claimingOfferId === offer.id
+                                    ? lang === "sw"
+                                      ? "Inawasha..."
+                                      : "Activating..."
+                                    : alreadyClaimed
+                                      ? lang === "sw"
+                                        ? "Imeshatumika"
+                                        : "Already Claimed"
+                                      : lang === "sw"
+                                        ? "Pata Bure Sasa"
+                                        : "Claim Free Wi-Fi"}
+                                </motion.button>
+                              </div>
+                            </motion.div>
+                          );
+                        })}
+                      </div>
+                    )}
+
                     {/* Step 1: Packages */}
                     <div>
                       <label className="block text-xs font-bold text-gray-300 mb-2 uppercase tracking-wider">
                         {t.step1}
                       </label>
                       {loadingPackages ? (
-                        <div className="text-xs text-gray-400 p-4 text-center">Inapakia vifurushi...</div>
+                        <div className="text-xs text-gray-400 p-4 text-center">
+                          {lang === "sw" ? "Inapakia vifurushi..." : "Loading packages..."}
+                        </div>
                       ) : (
-                        <div className="grid grid-cols-2 gap-2.5">
-                          {packages.map((pkg) => (
-                            <button
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                          {purchasablePackages.map((pkg, idx) => (
+                            <motion.button
                               key={pkg.id}
                               type="button"
+                              initial={{ opacity: 0, y: 8 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ duration: 0.2, delay: idx * 0.04 }}
+                              whileHover={{ y: -2 }}
+                              whileTap={{ scale: 0.98 }}
                               onClick={() => setSelectedPackageId(pkg.id)}
                               className={`p-3.5 rounded-2xl text-left border transition-all relative overflow-hidden ${
                                 selectedPackageId === pkg.id
                                   ? "bg-[#00f3ff]/15 border-[#00f3ff] shadow-[0_0_20px_rgba(0,243,255,0.2)]"
-                                  : "bg-white/5 border-white/10 hover:border-white/20"
+                                  : pkg.isOffer
+                                    ? "bg-amber-500/10 border-amber-400/40 hover:border-amber-400/70"
+                                    : "bg-white/5 border-white/10 hover:border-white/20"
                               }`}
                             >
+                              {pkg.isOffer && (
+                                <span className="inline-block text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 border border-amber-400/30 mb-1">
+                                  {pkg.offerType === "HAPPY_HOUR"
+                                    ? "HAPPY HOUR"
+                                    : lang === "sw"
+                                      ? "OFA"
+                                      : "PROMO"}
+                                </span>
+                              )}
                               <p className="font-black text-sm text-white">{pkg.name}</p>
-                              <p className="text-xs text-[#00f3ff] font-bold mt-1">
-                                TZS {pkg.priceTzs.toLocaleString()}
-                              </p>
+                              <div className="flex items-baseline gap-1.5 mt-1">
+                                <p className="text-xs text-[#00f3ff] font-bold">
+                                  TZS {pkg.priceTzs.toLocaleString()}
+                                </p>
+                                {pkg.isOffer && pkg.originalPriceTzs && pkg.originalPriceTzs > pkg.priceTzs && (
+                                  <p className="text-[10px] text-gray-500 line-through">
+                                    {pkg.originalPriceTzs.toLocaleString()}
+                                  </p>
+                                )}
+                              </div>
                               <div className="flex items-center gap-1 text-[10px] text-gray-400 mt-0.5">
                                 <Clock size={10} />
-                                <span>{pkg.durationMinutes >= 1440 ? `${Math.round(pkg.durationMinutes/1440)} Siku` : `${Math.round(pkg.durationMinutes/60)} Saa`}</span>
+                                <span>{formatPackageDuration(pkg.durationMinutes, lang)}</span>
                               </div>
-                            </button>
+                            </motion.button>
                           ))}
                         </div>
                       )}
@@ -454,22 +778,31 @@ function PortalContent() {
                       <label className="block text-xs font-bold text-gray-300 mb-2 uppercase tracking-wider">
                         {t.step2}
                       </label>
-                      <div className="grid grid-cols-2 gap-2">
-                        {PROVIDERS.map((prov) => (
-                          <button
-                            key={prov.id}
-                            type="button"
-                            onClick={() => setSelectedProvider(prov.id)}
-                            className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-between transition-all ${
-                              selectedProvider === prov.id
-                                ? `bg-white/15 border-[#00f3ff] text-white shadow-md ${prov.ring}`
-                                : "bg-white/5 border-white/10 text-gray-400 hover:text-white"
-                            }`}
-                          >
-                            <span>{prov.name}</span>
-                            <span className="text-[10px] opacity-70 uppercase font-mono">{prov.badge}</span>
-                          </button>
-                        ))}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                        {PROVIDERS.map((prov, idx) => {
+                          const isSelected = selectedProvider === prov.id;
+                          return (
+                            <motion.button
+                              key={prov.id}
+                              type="button"
+                              initial={{ opacity: 0, scale: 0.96 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              transition={{ duration: 0.2, delay: idx * 0.04 }}
+                              whileHover={{ scale: 1.02 }}
+                              whileTap={{ scale: 0.97 }}
+                              onClick={() => setSelectedProvider(prov.id)}
+                              className={`p-3 rounded-xl border-2 text-xs font-bold flex items-center gap-2.5 transition-all text-left ${
+                                isSelected ? prov.activeClass : prov.idleClass
+                              }`}
+                            >
+                              <ProviderLogo id={prov.id} size={34} />
+                              <div className="min-w-0 flex-1">
+                                <p className="font-extrabold text-white truncate leading-tight">{prov.name}</p>
+                                <p className="text-[10px] opacity-80 uppercase font-mono">{prov.badge}</p>
+                              </div>
+                            </motion.button>
+                          );
+                        })}
                       </div>
                     </div>
 
@@ -492,10 +825,12 @@ function PortalContent() {
                       <p className="text-[11px] text-gray-400 mt-1.5">{t.phoneHint}</p>
                     </div>
 
-                    <button
+                    <motion.button
+                      whileHover={{ scale: 1.01 }}
+                      whileTap={{ scale: 0.98 }}
                       type="submit"
                       disabled={checkoutLoading || !selectedPackageId}
-                      className="w-full bg-gradient-to-r from-[#00f3ff] via-[#6a00ff] to-[#9d00ff] text-white font-black py-4 rounded-2xl hover:opacity-95 transition-opacity shadow-lg shadow-[#00f3ff]/20 text-sm disabled:opacity-50 flex items-center justify-center gap-2"
+                      className={`w-full bg-gradient-to-r ${activeProviderObj.buttonGradient} text-white font-black py-4 rounded-2xl hover:opacity-95 transition-all shadow-lg text-sm disabled:opacity-50 flex items-center justify-center gap-2`}
                     >
                       {checkoutLoading ? (
                         <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -507,13 +842,18 @@ function PortalContent() {
                           </span>
                         </>
                       )}
-                    </button>
+                    </motion.button>
                   </form>
                 ) : (
                   /* ======================================================== */
                   /* ATTRACTIVE ANIMATED WAITING / RADAR LOADING STATE        */
                   /* ======================================================== */
-                  <div className="space-y-6 text-center py-6">
+                  <motion.div
+                    initial={{ opacity: 0, scale: 0.96 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ duration: 0.25 }}
+                    className="space-y-6 text-center py-6"
+                  >
                     {/* Animated Ripple / Radar Wave */}
                     <div className="relative w-32 h-32 mx-auto flex items-center justify-center">
                       {/* Radiating concentric pulse rings */}
@@ -540,8 +880,8 @@ function PortalContent() {
 
                     {/* Notification Title & Provider Badge */}
                     <div className="space-y-2">
-                      <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/5 border border-white/10 text-xs font-semibold text-gray-300">
-                        <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                      <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full border text-xs font-semibold ${activeProviderObj.pillClass}`}>
+                        <ProviderLogo id={activeProviderObj.id} size={20} />
                         <span>{activeProviderObj.name} • {phoneNumber}</span>
                       </div>
                       <h3 className="text-xl font-black text-white">{t.checkPhoneTitle}</h3>
@@ -602,14 +942,22 @@ function PortalContent() {
                         {t.cancel}
                       </button>
                     </div>
-                  </div>
+                  </motion.div>
                 )}
-              </div>
+              </motion.div>
             )}
 
             {/* TAB 2: VOUCHER REDEEM */}
             {activeTab === "voucher" && paymentMode !== "MOBILE_ONLY" && (
-              <form onSubmit={handleRedeemVoucher} className="space-y-5">
+              <motion.form
+                key="tab-voucher"
+                initial={{ opacity: 0, x: 12 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -12 }}
+                transition={{ duration: 0.22 }}
+                onSubmit={handleRedeemVoucher}
+                className="space-y-5"
+              >
                 <div>
                   <label className="block text-xs font-bold text-gray-300 mb-2 uppercase tracking-wider">
                     {t.enterVoucherLabel}
@@ -627,7 +975,9 @@ function PortalContent() {
                   <p className="text-[11px] text-gray-400 mt-2 text-center">{t.voucherHint}</p>
                 </div>
 
-                <button
+                <motion.button
+                  whileHover={{ scale: 1.01 }}
+                  whileTap={{ scale: 0.98 }}
                   type="submit"
                   disabled={redeemLoading || !voucherCode.trim()}
                   className="w-full bg-gradient-to-r from-[#00f3ff] to-[#9d00ff] text-white font-black py-4 rounded-2xl hover:opacity-95 transition-opacity shadow-lg shadow-[#00f3ff]/20 text-sm disabled:opacity-50 flex items-center justify-center gap-2"
@@ -640,25 +990,47 @@ function PortalContent() {
                       <span>{t.redeemBtn}</span>
                     </>
                   )}
-                </button>
-              </form>
+                </motion.button>
+              </motion.form>
             )}
-          </div>
+            </AnimatePresence>
+          </motion.div>
         )}
 
         {/* Security Footer */}
-        <div className="text-center text-[10px] text-gray-500 flex items-center justify-center gap-1.5">
-          <ShieldCheck size={14} className="text-green-500" />
-          <span>{t.secured}</span>
+        <div className="text-center text-[10px] text-gray-500 space-y-1.5">
+          {branding.supportPhone && (
+            <div>
+              <a
+                href={`tel:${branding.supportPhone.replace(/\s+/g, "")}`}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold hover:underline"
+                style={{ color: branding.primaryColor }}
+              >
+                <Phone size={12} />
+                <span>
+                  {lang === "sw" ? "Msaada wa Mwendeshaji:" : "Support:"} {branding.supportPhone}
+                </span>
+              </a>
+            </div>
+          )}
+          <div className="flex items-center justify-center gap-1.5">
+            <ShieldCheck size={14} className="text-green-500" />
+            <span>{t.secured}</span>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+function PortalFallback() {
+  const { t } = useLanguage();
+  return <div className="text-white text-center mt-20">{t("Inapakia Portal ya PoaFi...", "Loading PoaFi Portal...")}</div>;
+}
+
 export default function PortalPage() {
   return (
-    <Suspense fallback={<div className="text-white text-center mt-20">Loading PoaFi Portal...</div>}>
+    <Suspense fallback={<PortalFallback />}>
       <PortalContent />
     </Suspense>
   );

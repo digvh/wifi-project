@@ -29,12 +29,53 @@ router.get('/public/:tenantSlug', async (req, res) => {
         durationMinutes: true,
         downloadKbps: true,
         uploadKbps: true,
+        isOffer: true,
+        offerType: true,
+        offerActive: true,
+        originalPriceTzs: true,
+        offerEndsAt: true,
       },
-      orderBy: { priceTzs: 'asc' },
+      orderBy: [{ isOffer: 'desc' }, { priceTzs: 'asc' }],
     });
 
-    // Return paymentMode so the portal knows whether to show Voucher/Mobile Money tabs
-    res.json({ operator: tenant.name, paymentMode: (tenant as any).paymentMode || "MIXED", packages });
+    const now = new Date();
+    const visiblePackages = packages.filter((pkg) => {
+      if (!pkg.isOffer) return true;
+      if (!pkg.offerActive) return false;
+      if (pkg.offerEndsAt && pkg.offerEndsAt < now) return false;
+      return true;
+    });
+
+    const rawIp = (req.headers['x-forwarded-for'] as string) || req.socket.remoteAddress || req.ip || '';
+    const clientIp = typeof rawIp === 'string' ? rawIp.split(',')[0].trim() : '';
+    const deviceId = typeof req.query.deviceId === 'string' ? req.query.deviceId.trim() : '';
+
+    const claimFilters: any[] = [];
+    if (deviceId) claimFilters.push({ deviceKey: `dev:${deviceId}` });
+    if (clientIp) claimFilters.push({ ipAddress: clientIp }, { deviceKey: `ip:${clientIp}` });
+
+    const existingClaims = claimFilters.length > 0
+      ? await prisma.offerClaim.findMany({
+          where: { tenantId: tenant.id, OR: claimFilters },
+          select: { packageId: true },
+        })
+      : [];
+
+    const claimedOfferIds = Array.from(new Set(existingClaims.map((c) => c.packageId)));
+
+    // Return paymentMode + portal branding so the portal renders tenant-customized UI
+    res.json({
+      operator: tenant.name,
+      paymentMode: (tenant as any).paymentMode || "MIXED",
+      branding: {
+        logoUrl: (tenant as any).portalLogoUrl || null,
+        primaryColor: (tenant as any).portalColor || "#00f3ff",
+        tagline: (tenant as any).portalTagline || null,
+        supportPhone: (tenant as any).supportPhone || null,
+      },
+      packages: visiblePackages,
+      claimedOfferIds,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch public packages' });
   }
@@ -83,7 +124,19 @@ router.get('/', async (req, res) => {
 
 router.post('/', validate(createPackageSchema), async (req, res) => {
   try {
-    const { name, priceTzs, durationMinutes, downloadKbps, uploadKbps, routerId } = req.body;
+    const {
+      name,
+      priceTzs,
+      durationMinutes,
+      downloadKbps,
+      uploadKbps,
+      routerId,
+      isOffer,
+      offerType,
+      offerActive,
+      originalPriceTzs,
+      offerEndsAt,
+    } = req.body;
 
     const targetTenantId = req.user?.role === 'PLATFORM_ADMIN'
       ? (req.body.tenantId || req.user.tenantId)
@@ -103,6 +156,11 @@ router.post('/', validate(createPackageSchema), async (req, res) => {
         durationMinutes: parseInt(durationMinutes),
         downloadKbps: downloadKbps ? parseInt(downloadKbps) : 3000,
         uploadKbps: uploadKbps ? parseInt(uploadKbps) : 1000,
+        isOffer: Boolean(isOffer),
+        offerType: isOffer ? (offerType || 'LIMITED_PROMO') : null,
+        offerActive: isOffer ? (offerActive !== undefined ? Boolean(offerActive) : true) : true,
+        originalPriceTzs: originalPriceTzs !== undefined && originalPriceTzs !== null ? parseInt(originalPriceTzs) : null,
+        offerEndsAt: offerEndsAt ? new Date(offerEndsAt) : null,
       },
     });
 
@@ -115,7 +173,19 @@ router.post('/', validate(createPackageSchema), async (req, res) => {
 router.put('/:id', validate(updatePackageSchema), async (req, res) => {
   try {
     const packageId = req.params.id;
-    const { name, priceTzs, durationMinutes, downloadKbps, uploadKbps, routerId } = req.body;
+    const {
+      name,
+      priceTzs,
+      durationMinutes,
+      downloadKbps,
+      uploadKbps,
+      routerId,
+      isOffer,
+      offerType,
+      offerActive,
+      originalPriceTzs,
+      offerEndsAt,
+    } = req.body;
 
     const existingPackage = await prisma.package.findUnique({ where: { id: packageId } });
     if (!existingPackage) {
@@ -137,6 +207,11 @@ router.put('/:id', validate(updatePackageSchema), async (req, res) => {
         ...(downloadKbps !== undefined && { downloadKbps: parseInt(downloadKbps) }),
         ...(uploadKbps !== undefined && { uploadKbps: parseInt(uploadKbps) }),
         ...(routerId !== undefined && { routerId: routerId || null }),
+        ...(isOffer !== undefined && { isOffer: Boolean(isOffer) }),
+        ...(offerType !== undefined && { offerType: offerType || null }),
+        ...(offerActive !== undefined && { offerActive: Boolean(offerActive) }),
+        ...(originalPriceTzs !== undefined && { originalPriceTzs: originalPriceTzs !== null ? parseInt(originalPriceTzs) : null }),
+        ...(offerEndsAt !== undefined && { offerEndsAt: offerEndsAt ? new Date(offerEndsAt) : null }),
       },
     });
 

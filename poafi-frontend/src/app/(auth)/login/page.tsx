@@ -6,6 +6,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Lock, Mail, ArrowLeft, Wifi, UserPlus, Eye, EyeOff, Sparkles, CheckCircle2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 import { apiFetch } from "@/lib/api";
 
 export default function LoginPage() {
@@ -16,6 +17,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [loginSuccess, setLoginSuccess] = useState(false);
   const { login } = useAuth();
+  const { lang, setLang, t } = useLanguage();
   const router = useRouter();
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -35,14 +37,19 @@ export default function LoginPage() {
         router.push("/dashboard");
       }, 700);
     } catch (err: any) {
-      setError(err.message || "Failed to sign in. Please verify your credentials.");
+      setError(
+        err.message ||
+          t(
+            "Imeshindwa kuingia. Tafadhali hakiki taarifa zako.",
+            "Failed to sign in. Please verify your credentials.",
+          ),
+      );
       setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden bg-[#070712]">
-      {/* Background ambient floating glowing orbs */}
       <motion.div 
         animate={{ scale: [1, 1.2, 1], opacity: [0.15, 0.25, 0.15] }}
         transition={{ repeat: Infinity, duration: 8, ease: "easeInOut" }}
@@ -54,21 +61,43 @@ export default function LoginPage() {
         className="absolute bottom-1/4 right-1/4 w-96 h-96 bg-[#9d00ff]/20 rounded-full blur-[100px] pointer-events-none" 
       />
 
-      {/* Top navigation links */}
-      <div className="w-full max-w-md mb-4 flex justify-between items-center text-xs">
+      {/* Top navigation & language switch */}
+      <div className="w-full max-w-md mb-4 flex justify-between items-center text-xs gap-2">
         <Link 
           href="/" 
           className="flex items-center gap-1.5 text-gray-400 hover:text-[#00f3ff] transition-colors"
         >
           <ArrowLeft size={14} />
-          <span>Rudi Mwanzo / Home</span>
+          <span>{t("Rudi Mwanzo", "Home")}</span>
         </Link>
+
+        <div className="flex items-center gap-1 bg-white/5 border border-white/10 p-0.5 rounded-full">
+          <button
+            type="button"
+            onClick={() => setLang("sw")}
+            className={`px-2 py-0.5 rounded-full text-[11px] font-bold transition-all ${
+              lang === "sw" ? "bg-[#00f3ff] text-black" : "text-gray-400 hover:text-white"
+            }`}
+          >
+            🇹🇿 SW
+          </button>
+          <button
+            type="button"
+            onClick={() => setLang("en")}
+            className={`px-2 py-0.5 rounded-full text-[11px] font-bold transition-all ${
+              lang === "en" ? "bg-[#00f3ff] text-black" : "text-gray-400 hover:text-white"
+            }`}
+          >
+            🇬🇧 EN
+          </button>
+        </div>
+
         <Link 
           href="/portal" 
           className="flex items-center gap-1.5 text-gray-400 hover:text-[#00f3ff] transition-colors"
         >
           <Wifi size={14} />
-          <span>Customer Captive Portal</span>
+          <span>{t("Portal ya Mteja", "Customer Portal")}</span>
         </Link>
       </div>
 
@@ -87,7 +116,7 @@ export default function LoginPage() {
             Poa<span className="text-[#00f3ff]">Fi</span> Core
           </h1>
           <p className="text-gray-400 mt-1.5 text-xs">
-            Ingia kusimamia mtandao wako wa Wi-Fi / Operator Dashboard
+            {t("Ingia kusimamia mtandao wako wa Wi-Fi", "Sign in to manage your Wi-Fi network")}
           </p>
         </div>
 
@@ -104,7 +133,7 @@ export default function LoginPage() {
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
             <label className="block text-xs font-semibold text-gray-300 mb-1.5 uppercase tracking-wider">
-              Barua Pepe / Email Address
+              {t("Barua Pepe", "Email Address")}
             </label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-3.5 w-4 h-4 text-gray-500" />
@@ -122,7 +151,7 @@ export default function LoginPage() {
           <div>
             <div className="flex justify-between items-center mb-1.5">
               <label className="block text-xs font-semibold text-gray-300 uppercase tracking-wider">
-                Nenosiri / Password
+                {t("Nenosiri", "Password")}
               </label>
             </div>
             <div className="relative">
@@ -153,17 +182,17 @@ export default function LoginPage() {
             {loginSuccess ? (
               <span className="flex items-center gap-1.5 text-white font-bold">
                 <CheckCircle2 size={16} className="text-green-300 animate-bounce" />
-                <span>Imefanikiwa! Inaelekeza... / Welcome!</span>
+                <span>{t("Imefanikiwa! Inaelekeza...", "Signed in! Redirecting...")}</span>
               </span>
             ) : loading ? (
               <div className="flex items-center gap-2">
                 <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                <span>Inathibitisha... / Authenticating...</span>
+                <span>{t("Inathibitisha...", "Authenticating...")}</span>
               </div>
             ) : (
               <span className="flex items-center gap-1.5">
                 <Sparkles size={14} />
-                <span>Ingia Kwenye Akaunti / Sign In</span>
+                <span>{t("Ingia Kwenye Akaunti", "Sign In")}</span>
               </span>
             )}
           </button>
@@ -171,14 +200,14 @@ export default function LoginPage() {
 
         <div className="mt-8 pt-6 border-t border-white/10 text-center">
           <p className="text-xs text-gray-400">
-            Unataka kuanzisha biashara ya Wi-Fi mtaani kwako?
+            {t("Unataka kuanzisha biashara ya Wi-Fi mtaani kwako?", "Want to start a Wi-Fi hotspot business?")}
           </p>
           <Link
             href="/register"
             className="inline-flex items-center gap-1.5 mt-2 text-[#00f3ff] font-bold hover:underline text-xs"
           >
             <UserPlus size={14} />
-            <span>Jisajili na Utengeneze Nenosiri Lako / Register as Operator &rarr;</span>
+            <span>{t("Jisajili na Utengeneze Nenosiri Lako →", "Register as Operator →")}</span>
           </Link>
         </div>
       </motion.div>

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { apiFetch } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 
 type Application = {
   id: string;
@@ -36,6 +37,7 @@ type Application = {
 
 export default function ApplicationsPage() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const [applications, setApplications] = useState<Application[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
@@ -95,7 +97,7 @@ export default function ApplicationsPage() {
         fetchApplications();
       }, 1500);
     } catch (err: any) {
-      setActionError(err.message || "Failed to approve application");
+      setActionError(err.message || t("Imeshindikana kukubali ombi", "Failed to approve application"));
     } finally {
       setActionLoading(false);
     }
@@ -119,7 +121,7 @@ export default function ApplicationsPage() {
         fetchApplications();
       }, 1500);
     } catch (err: any) {
-      setActionError(err.message || "Failed to reject application");
+      setActionError(err.message || t("Imeshindikana kukataa ombi", "Failed to reject application"));
     } finally {
       setActionLoading(false);
     }
@@ -129,8 +131,8 @@ export default function ApplicationsPage() {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center">
         <ShieldAlert className="w-16 h-16 text-yellow-500 mb-4" />
-        <h2 className="text-xl font-bold">Access Restricted</h2>
-        <p className="text-gray-400 mt-2">Only Super Admins can review and approve operator applications.</p>
+        <h2 className="text-xl font-bold">{t("Ufikiaji Umezuiwa", "Access Restricted")}</h2>
+        <p className="text-gray-400 mt-2">{t("Wasimamizi Wakuu pekee wanaweza kukagua maombi haya.", "Only Super Admins can review and approve operator applications.")}</p>
       </div>
     );
   }
@@ -153,15 +155,15 @@ export default function ApplicationsPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-bold">Operator Applications</h1>
+            <h1 className="text-3xl font-bold">{t("Maombi ya Waendeshaji", "Operator Applications")}</h1>
             {pendingCount > 0 && (
               <span className="bg-yellow-500/20 text-yellow-400 border border-yellow-500/40 text-xs px-2.5 py-1 rounded-full font-bold animate-pulse">
-                {pendingCount} Pending
+                {pendingCount} {t("Yanasubiri", "Pending")}
               </span>
             )}
           </div>
           <p className="text-gray-400 text-sm mt-1">
-            Review and approve prospective Wi-Fi hotspot operators who applied through the public portal
+            {t("Kagua na uidhinishe waombaji wapya waliojisajili kwenye tovuti.", "Review and approve prospective Wi-Fi hotspot operators who applied through the public portal")}
           </p>
         </div>
 
@@ -170,7 +172,7 @@ export default function ApplicationsPage() {
           className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-xl hover:bg-white/10 transition-colors text-sm text-gray-300 w-fit"
         >
           <RefreshCw size={16} className={loading ? "animate-spin" : ""} />
-          <span>Refresh</span>
+          <span>{t("Sasisha", "Refresh")}</span>
         </button>
       </div>
 
@@ -180,7 +182,7 @@ export default function ApplicationsPage() {
           <Search className="absolute left-3.5 top-3 w-4 h-4 text-gray-500" />
           <input
             type="text"
-            placeholder="Search by business name, contact, city or email..."
+            placeholder={t("Tafuta kwa jina la biashara, mji au barua pepe...", "Search by business name, contact, city or email...")}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full bg-white/5 border border-white/10 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[#00f3ff]"
@@ -198,7 +200,7 @@ export default function ApplicationsPage() {
                   : "bg-white/5 text-gray-400 border border-white/10 hover:text-white"
               }`}
             >
-              {st}
+              {st === "ALL" ? t("YOTE", "ALL") : st === "PENDING" ? t("YANASUBIRI", "PENDING") : st === "APPROVED" ? t("YALIYOKUBALIWA", "APPROVED") : t("YALIYOKATALIWA", "REJECTED")}
             </button>
           ))}
         </div>
@@ -208,16 +210,22 @@ export default function ApplicationsPage() {
       {loading ? (
         <div className="p-12 text-center text-gray-400">
           <div className="w-8 h-8 border-2 border-[#00f3ff] border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-          <p>Loading applications...</p>
+          <p>{t("Inapakia maombi...", "Loading applications...")}</p>
         </div>
       ) : filteredApps.length === 0 ? (
         <div className="glass-panel p-12 text-center text-gray-400 rounded-2xl">
           <ClipboardCheck className="w-12 h-12 mx-auto mb-3 opacity-30 text-[#00f3ff]" />
-          <p className="text-base font-medium text-gray-300">No applications found</p>
+          <p className="text-base font-medium text-gray-300">{t("Hakuna maombi yaliyopatikana", "No applications found")}</p>
           <p className="text-xs text-gray-500 mt-1">
             {statusFilter !== "ALL"
-              ? `No applications currently with status ${statusFilter}`
-              : "When operators apply via the public website, their submissions will appear here."}
+              ? t(
+                  `Hakuna maombi yenye hali ya ${statusFilter === "PENDING" ? "Yanasubiri" : statusFilter === "APPROVED" ? "Yaliyokubaliwa" : "Yaliyokataliwa"}`,
+                  `No applications currently with status ${statusFilter}`
+                )
+              : t(
+                  "Waendeshaji watakapotuma maombi kupitia tovuti ya umma, yataonekana hapa.",
+                  "When operators apply via the public website, their submissions will appear here."
+                )}
           </p>
         </div>
       ) : (
@@ -252,7 +260,11 @@ export default function ApplicationsPage() {
                         : "bg-red-500/15 text-red-400 border-red-500/30"
                     }`}
                   >
-                    {app.status}
+                    {app.status === "PENDING"
+                      ? t("INASUBIRI", "PENDING")
+                      : app.status === "APPROVED"
+                      ? t("IMEKUBALIWA", "APPROVED")
+                      : t("IMEKATALIWA", "REJECTED")}
                   </span>
                 </div>
 
@@ -274,7 +286,7 @@ export default function ApplicationsPage() {
                   </div>
                   <div className="flex items-center gap-2 text-gray-500">
                     <Clock size={14} className="shrink-0" />
-                    <span>Applied: {new Date(app.createdAt).toLocaleDateString()}</span>
+                    <span>{t("Iliwasilishwa:", "Applied:")} {new Date(app.createdAt).toLocaleDateString()}</span>
                   </div>
                 </div>
 
@@ -288,7 +300,7 @@ export default function ApplicationsPage() {
                 {/* Rejection Note */}
                 {app.reviewNote && (
                   <div className="bg-red-500/10 p-2.5 rounded-xl border border-red-500/20 text-xs text-red-300 mb-4">
-                    <strong>Review note:</strong> {app.reviewNote}
+                    <strong>{t("Sababu ya uamuzi:", "Review note:")}</strong> {app.reviewNote}
                   </div>
                 )}
               </div>
@@ -306,7 +318,7 @@ export default function ApplicationsPage() {
                       className="flex items-center justify-center gap-1.5 py-2 px-3 bg-green-500/20 hover:bg-green-500/30 text-green-400 border border-green-500/40 rounded-xl text-xs font-bold transition-colors"
                     >
                       <CheckCircle size={14} />
-                      <span>Approve</span>
+                      <span>{t("Kubali", "Approve")}</span>
                     </button>
                     <button
                       onClick={() => {
@@ -317,18 +329,18 @@ export default function ApplicationsPage() {
                       className="flex items-center justify-center gap-1.5 py-2 px-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 border border-red-500/40 rounded-xl text-xs font-bold transition-colors"
                     >
                       <XCircle size={14} />
-                      <span>Reject</span>
+                      <span>{t("Kataa", "Reject")}</span>
                     </button>
                   </div>
                 ) : app.status === "APPROVED" ? (
                   <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-green-400 font-semibold bg-green-500/5 rounded-xl border border-green-500/20">
                     <CheckCircle size={14} />
-                    <span>Active Tenant Account Created</span>
+                    <span>{t("Akaunti ya Mwendeshaji Imeundwa", "Active Tenant Account Created")}</span>
                   </div>
                 ) : (
                   <div className="flex items-center justify-center gap-1.5 py-2 text-xs text-red-400 font-semibold bg-red-500/5 rounded-xl border border-red-500/20">
                     <XCircle size={14} />
-                    <span>Application Rejected</span>
+                    <span>{t("Ombi Limekataliwa", "Application Rejected")}</span>
                   </div>
                 )}
               </div>
@@ -343,11 +355,12 @@ export default function ApplicationsPage() {
           <div className="glass-panel p-6 rounded-2xl max-w-md w-full border border-white/20 shadow-2xl">
             <h3 className="text-xl font-bold flex items-center gap-2">
               <CheckCircle className="text-green-400" />
-              <span>Approve Operator</span>
+              <span>{t("Idhinisha Mwendeshaji", "Approve Operator")}</span>
             </h3>
             <p className="text-xs text-gray-400 mt-1">
-              Approving will create a new tenant workspace for{" "}
-              <strong className="text-white">{approvingApp.businessName}</strong> and generate login credentials for{" "}
+              {t("Kuidhinisha kutaunda eneo jipya la kazi kwa", "Approving will create a new tenant workspace for")}{" "}
+              <strong className="text-white">{approvingApp.businessName}</strong>{" "}
+              {t("na kuandaa akaunti ya kuingia kwa", "and generate login credentials for")}{" "}
               <strong className="text-[#00f3ff]">{approvingApp.email}</strong>.
             </p>
 
@@ -368,14 +381,17 @@ export default function ApplicationsPage() {
                 <div className="p-3.5 bg-green-500/10 border border-green-500/30 rounded-xl space-y-2">
                   <div className="flex items-center gap-2 text-xs font-bold text-green-400">
                     <CheckCircle size={15} />
-                    <span>Nenosiri Limetengenezwa Tayari / Password Already Set</span>
+                    <span>{t("Nenosiri Limetengenezwa Tayari", "Password Already Set")}</span>
                   </div>
                   <p className="text-xs text-gray-300">
-                    Operator huyu tayari ameweka nenosiri lake la siri alipojiandikisha. Hakuna haja ya kuandika chochote tena — bonyeza kitufe hapa chini kuthibitisha akaunti yake moja kwa moja.
+                    {t(
+                      "Mwendeshaji huyu tayari ameweka nenosiri lake la siri alipojiandikisha. Hakuna haja ya kuandika chochote tena — bonyeza kitufe hapa chini kuthibitisha akaunti yake moja kwa moja.",
+                      "This operator already set their password during registration. No password entry is needed — click below to activate their account immediately."
+                    )}
                   </p>
                   <div className="pt-1 text-[11px] text-gray-400 border-t border-green-500/20 flex justify-between">
-                    <span>Eneo (Site ya Kwanza):</span>
-                    <strong className="text-[#00f3ff]">{approvingApp.city} (Itawekwa kiotomatiki)</strong>
+                    <span>{t("Eneo (Site ya Kwanza):", "Primary Site:")}</span>
+                    <strong className="text-[#00f3ff]">{approvingApp.city} ({t("Itawekwa kiotomatiki", "Auto-created")})</strong>
                   </div>
 
                   <div className="pt-2">
@@ -384,20 +400,27 @@ export default function ApplicationsPage() {
                       onClick={() => setOverridePassword(!overridePassword)}
                       className="text-[11px] text-[#00f3ff] hover:underline"
                     >
-                      {overridePassword ? "← Tumia nenosiri la mteja (Pendekezo)" : "Badilisha nenosiri kwa lazima (Optional)"}
+                      {overridePassword
+                        ? t("← Tumia nenosiri la mteja (Pendekezo)", "← Use applicant's password (Recommended)")
+                        : t("Badilisha nenosiri kwa lazima (Si lazima)", "Force override password (Optional)")}
                     </button>
                   </div>
                 </div>
               ) : (
                 <p className="text-xs text-gray-400">
-                  Ombi hili halina nenosiri lililotengenezwa awali. Weka nenosiri la kuanzia hapa chini:
+                  {t(
+                    "Ombi hili halina nenosiri lililotengenezwa awali. Weka nenosiri la kuanzia hapa chini:",
+                    "This application does not have a preset password. Enter an initial password below:"
+                  )}
                 </p>
               )}
 
               {(!approvingApp.hasPassword || overridePassword) && (
                 <div>
                   <label className="block text-xs font-medium text-gray-300 mb-1">
-                    {overridePassword ? "Nenosiri Jipya (Override Password):" : "Assign Initial Password for Operator:"}
+                    {overridePassword
+                      ? t("Nenosiri Jipya (Badilisha):", "New Override Password:")
+                      : t("Weka Nenosiri la Kuanzia la Mwendeshaji:", "Assign Initial Password for Operator:")}
                   </label>
                   <div className="relative">
                     <KeyRound className="absolute left-3 top-2.5 w-4 h-4 text-gray-500" />
@@ -406,7 +429,7 @@ export default function ApplicationsPage() {
                       value={approvalPassword}
                       onChange={(e) => setApprovalPassword(e.target.value)}
                       className="w-full bg-white/5 border border-white/10 rounded-xl pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-[#00f3ff]"
-                      placeholder="Min 8 characters"
+                      placeholder={t("Angalau herufi 8", "Min 8 characters")}
                     />
                   </div>
                 </div>
@@ -422,7 +445,7 @@ export default function ApplicationsPage() {
                   }}
                   className="px-4 py-2 text-xs text-gray-400 hover:text-white"
                 >
-                  Cancel
+                  {t("Ghairi", "Cancel")}
                 </button>
                 <button
                   type="button"
@@ -430,7 +453,7 @@ export default function ApplicationsPage() {
                   onClick={handleApprove}
                   className="px-5 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-xl text-xs hover:opacity-90 disabled:opacity-50 flex items-center gap-1.5 shadow-lg shadow-green-500/20"
                 >
-                  {actionLoading ? "Processing..." : "Confirm & Activate Workspace"}
+                  {actionLoading ? t("Inachakata...", "Processing...") : t("Thibitisha na Washa Akaunti", "Confirm & Activate Workspace")}
                 </button>
               </div>
             </div>
@@ -444,10 +467,10 @@ export default function ApplicationsPage() {
           <div className="glass-panel p-6 rounded-2xl max-w-md w-full border border-white/20 shadow-2xl">
             <h3 className="text-xl font-bold flex items-center gap-2">
               <XCircle className="text-red-400" />
-              <span>Reject Application</span>
+              <span>{t("Kataa Ombi", "Reject Application")}</span>
             </h3>
             <p className="text-xs text-gray-400 mt-1">
-              Mark application for <strong className="text-white">{rejectingApp.businessName}</strong> as rejected.
+              {t("Weka alama ya kukataliwa kwa ombi la", "Mark application for")} <strong className="text-white">{rejectingApp.businessName}</strong>{t(".", " as rejected.")}
             </p>
 
             {actionError && (
@@ -464,7 +487,7 @@ export default function ApplicationsPage() {
 
             <div className="mt-4 space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-300 mb-1">Reason / Note for rejection:</label>
+                <label className="block text-xs font-medium text-gray-300 mb-1">{t("Sababu / Maelezo ya kukataa:", "Reason / Note for rejection:")}</label>
                 <textarea
                   rows={3}
                   value={rejectNote}
@@ -480,7 +503,7 @@ export default function ApplicationsPage() {
                   onClick={() => setRejectingApp(null)}
                   className="px-4 py-2 text-xs text-gray-400 hover:text-white"
                 >
-                  Cancel
+                  {t("Ghairi", "Cancel")}
                 </button>
                 <button
                   type="button"
@@ -488,7 +511,7 @@ export default function ApplicationsPage() {
                   onClick={handleReject}
                   className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl text-xs disabled:opacity-50"
                 >
-                  {actionLoading ? "Processing..." : "Confirm Rejection"}
+                  {actionLoading ? t("Inachakata...", "Processing...") : t("Thibitisha Kukataa", "Confirm Rejection")}
                 </button>
               </div>
             </div>

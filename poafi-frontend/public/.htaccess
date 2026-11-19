@@ -1,0 +1,34 @@
+# ============================================================================
+# PoaFi Frontend - Apache / LiteSpeed Shared Hosting (.htaccess)
+# Place inside public_html/ along with the exported files from poafi-frontend/out/
+# ============================================================================
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # 1. Never rewrite API requests (handled by cPanel Node.js Passenger app or reverse proxy)
+  RewriteRule ^api(/.*)?$ - [L]
+
+  # 2. Serve existing files and directories directly
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # 3. Clean URLs: map /dashboard -> /dashboard.html, /portal -> /portal.html, etc.
+  RewriteCond %{REQUEST_FILENAME}.html -f
+  RewriteRule ^(.+?)/?$ $1.html [L]
+
+  # 4. Directory index fallback: map /route -> /route/index.html
+  RewriteCond %{REQUEST_FILENAME}/index.html -f
+  RewriteRule ^(.+?)/?$ $1/index.html [L]
+
+  # 5. Fallback to 404.html or index.html
+  RewriteCond %{DOCUMENT_ROOT}/404.html -f
+  RewriteRule ^ /404.html [L]
+</IfModule>
+
+# Cache immutable Next.js static assets
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/html "access plus 0 seconds"
+</IfModule>

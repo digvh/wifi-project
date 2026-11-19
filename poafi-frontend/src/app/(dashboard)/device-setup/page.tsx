@@ -19,19 +19,20 @@ import {
   Truck
 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { useLanguage } from "@/context/LanguageContext";
 
-const STATUS_LABELS: Record<string, string> = {
-  DEVICE_RECEIVED: "Kifaa Kimepokelewa / Device received",
-  CONFIGURED: "Imesanidiwa / Configured, ready to ship",
-  SHIPPED_BACK: "Imetumwa / Shipped back",
-  CANCELLED: "Imeghairiwa / Cancelled",
+const STATUS_LABELS: Record<string, { sw: string; en: string }> = {
+  DEVICE_RECEIVED: { sw: "Kifaa Kimepokelewa", en: "Device received" },
+  CONFIGURED: { sw: "Imesanidiwa, tayari kutumwa", en: "Configured, ready to ship" },
+  SHIPPED_BACK: { sw: "Imetumwa kurudi", en: "Shipped back" },
+  CANCELLED: { sw: "Imeghairiwa", en: "Cancelled" },
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  PHYSICAL_HANDOVER: "Physical handover",
-  REMOTE: "Remote setup",
-  ASSISTED: "Admin assisted",
-  SELF: "Self setup",
+const TYPE_LABELS: Record<string, { sw: string; en: string }> = {
+  PHYSICAL_HANDOVER: { sw: "Kutuma kifaa halisi", en: "Physical handover" },
+  REMOTE: { sw: "Usanidi wa mbali", en: "Remote setup" },
+  ASSISTED: { sw: "Msaada wa msimamizi", en: "Admin assisted" },
+  SELF: { sw: "Usanidi binafsi", en: "Self setup" },
 };
 
 type SetupRequest = {
@@ -59,6 +60,7 @@ type Tenant = {
 
 export default function DeviceSetupPage() {
   const { user } = useAuth();
+  const { t } = useLanguage();
   const isSuperAdmin = user?.role === "PLATFORM_ADMIN";
 
   const [requests, setRequests] = useState<SetupRequest[]>([]);
@@ -129,7 +131,7 @@ export default function DeviceSetupPage() {
     setSuccess("");
 
     if (isSuperAdmin && !selectedTenantId) {
-      setError("Tafadhali chagua Operator wa kumsaidia / Please select an Operator to assist");
+      setError(t("Tafadhali chagua Mwendeshaji wa kumsaidia", "Please select an Operator to assist"));
       setSubmitting(false);
       return;
     }
@@ -145,11 +147,11 @@ export default function DeviceSetupPage() {
           serialNumber: serialNumber || undefined,
           macAddress: macAddress || undefined,
           notes: requestType === "PHYSICAL_HANDOVER" && courierInfo
-            ? `${notes}\n\n[Courier / delivery details] ${courierInfo}`
+            ? `${notes}\n\n[${t("Maelezo ya usafirishaji", "Courier / delivery details")}] ${courierInfo}`
             : notes,
         }),
       });
-      setSuccess("Ombi la kusanidi kifaa limewasilishwa kikamilifu! / Device setup request created successfully!");
+      setSuccess(t("Ombi la kusanidi kifaa limewasilishwa kikamilifu!", "Device setup request created successfully!"));
       setDeviceName("");
       setNotes("");
       setSerialNumber("");
@@ -159,7 +161,7 @@ export default function DeviceSetupPage() {
       await loadRequests(filterTenantId);
       setTimeout(() => setSuccess(""), 4000);
     } catch (err: any) {
-      setError(err.message || "Failed to submit request");
+      setError(err.message || t("Imeshindikana kutuma ombi", "Failed to submit request"));
     } finally {
       setSubmitting(false);
     }
@@ -178,12 +180,17 @@ export default function DeviceSetupPage() {
           adminNotes,
         }),
       });
-      setSuccess(`Setup request for ${assistingRequest.deviceName} updated to ${updateStatus}`);
+      setSuccess(
+        t(
+          `Ombi la ${assistingRequest.deviceName} limesasishwa kuwa ${updateStatus}`,
+          `Setup request for ${assistingRequest.deviceName} updated to ${updateStatus}`
+        )
+      );
       setAssistingRequest(null);
       await loadRequests(filterTenantId);
       setTimeout(() => setSuccess(""), 4000);
     } catch (err: any) {
-      setError(err.message || "Failed to update request");
+      setError(err.message || t("Imeshindikana kusasisha ombi", "Failed to update request"));
     } finally {
       setUpdating(false);
     }
@@ -196,12 +203,18 @@ export default function DeviceSetupPage() {
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-3">
             <Wrench className="text-[#00f3ff] w-8 h-8" />
-            <span>Msaada wa Vifaa / Device Setup Requests</span>
+            <span>{t("Msaada wa Vifaa", "Device Setup Requests")}</span>
           </h1>
           <p className="text-gray-400 text-sm mt-1">
             {isSuperAdmin
-              ? "Saidia ma-operator kusanidi routers, access points (MikroTik, Omada, UniFi) na mtandao wao."
-              : "Omba msaada kutoka kwa wahandisi wa PoaFi kusanidi router au access point yako."}
+              ? t(
+                  "Saidia waendeshaji kusanidi routers, access points (MikroTik, Omada, UniFi) na mtandao wao.",
+                  "Help operators configure routers, access points (MikroTik, Omada, UniFi), and their network.",
+                )
+              : t(
+                  "Omba msaada kutoka kwa wahandisi wa PoaFi kusanidi router au access point yako.",
+                  "Request remote or physical setup assistance from PoaFi engineers for your router or AP.",
+                )}
           </p>
         </div>
 
@@ -211,7 +224,7 @@ export default function DeviceSetupPage() {
             className="px-3.5 py-2.5 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300 rounded-xl text-xs flex items-center gap-2 transition-colors"
           >
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-            <span>Refresh</span>
+            <span>{t("Sasisha", "Refresh")}</span>
           </button>
 
           <button
@@ -219,7 +232,13 @@ export default function DeviceSetupPage() {
             className="bg-gradient-to-r from-[#00f3ff] to-[#9d00ff] text-white font-bold px-5 py-2.5 rounded-xl text-sm shadow-lg shadow-[#00f3ff]/20 flex items-center gap-2 transition-all hover:opacity-90"
           >
             <Plus size={16} />
-            <span>{showForm ? "Cancel" : isSuperAdmin ? "Msaidie Operator Mpya" : "Omba Msaada (New Request)"}</span>
+            <span>
+              {showForm
+                ? t("Ghairi", "Cancel")
+                : isSuperAdmin
+                  ? t("Msaidie Mwendeshaji Mpya", "Assist New Operator")
+                  : t("Omba Msaada", "New Setup Request")}
+            </span>
           </button>
         </div>
       </div>
@@ -251,7 +270,10 @@ export default function DeviceSetupPage() {
               <Truck className="text-[#00f3ff] shrink-0" size={18} />
               <div>
                 <p className="font-bold">
-                  {r.deviceName || "Kifaa Chako"} — {STATUS_LABELS[r.status] || "Inashughulikiwa / In Progress"}
+                  {r.deviceName || t("Kifaa Chako", "Your Device")} —{" "}
+                  {STATUS_LABELS[r.status]
+                    ? t(STATUS_LABELS[r.status].sw, STATUS_LABELS[r.status].en)
+                    : t("Inashughulikiwa", "In Progress")}
                 </p>
                 {r.adminNotes && <p className="text-gray-300 mt-0.5">{r.adminNotes}</p>}
               </div>
@@ -263,7 +285,7 @@ export default function DeviceSetupPage() {
         <div className="glass-panel p-4 rounded-2xl border border-white/10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
           <div className="flex items-center gap-2 text-sm text-gray-300">
             <Building2 className="text-[#00f3ff] w-4 h-4" />
-            <span className="font-semibold">Chagua Operator / Select Operator to Help:</span>
+            <span className="font-semibold">{t("Chuja kwa Mwendeshaji:", "Filter by Operator:")}</span>
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto">
@@ -272,10 +294,10 @@ export default function DeviceSetupPage() {
               onChange={(e) => setFilterTenantId(e.target.value)}
               className="bg-[#0a0a1a] border border-[#00f3ff]/40 text-white rounded-xl px-4 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-[#00f3ff] w-full sm:w-64"
             >
-              <option value="">Wote / All Operators ({tenants.length})</option>
-              {tenants.map((t) => (
-                <option key={t.id} value={t.id}>
-                  🏢 {t.name} ({t.slug})
+              <option value="">{t("Waendeshaji Wote", "All Operators")} ({tenants.length})</option>
+              {tenants.map((tItem) => (
+                <option key={tItem.id} value={tItem.id}>
+                  🏢 {tItem.name} ({tItem.slug})
                 </option>
               ))}
             </select>
@@ -288,7 +310,11 @@ export default function DeviceSetupPage() {
         <form onSubmit={handleSubmit} className="glass-panel p-6 space-y-4 rounded-2xl border border-white/10 max-w-2xl animate-in fade-in duration-200">
           <h2 className="font-bold text-lg text-white flex items-center gap-2">
             <Wrench size={18} className="text-[#00f3ff]" />
-            <span>{isSuperAdmin ? "Msaidie Operator Kusanidi Kifaa" : "Wasilisha Ombi la Kusanidi Kifaa"}</span>
+            <span>
+              {isSuperAdmin
+                ? t("Msaidie Mwendeshaji Kusanidi Kifaa", "Help Operator Configure Device")
+                : t("Wasilisha Ombi la Kusanidi Kifaa", "Submit Device Setup Request")}
+            </span>
           </h2>
 
           {/* Admin Operator Dropdown */}
@@ -296,7 +322,7 @@ export default function DeviceSetupPage() {
             <div className="p-4 bg-[#00f3ff]/5 border border-[#00f3ff]/20 rounded-xl space-y-1.5">
               <label className="text-xs font-bold text-[#00f3ff] flex items-center gap-2">
                 <Building2 size={14} />
-                <span>Chagua Operator wa Kumsaidia / Select Operator to Assist: *</span>
+                <span>{t("Chagua Mwendeshaji wa Kumsaidia *", "Select Operator to Assist *")}</span>
               </label>
               <select
                 required
@@ -304,27 +330,41 @@ export default function DeviceSetupPage() {
                 onChange={(e) => setSelectedTenantId(e.target.value)}
                 className="w-full bg-[#0a0a1a] border border-white/20 rounded-lg p-2.5 text-xs text-white focus:border-[#00f3ff] outline-none"
               >
-                <option value="">-- Chagua Operator / Select Operator --</option>
-                {tenants.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({t.slug})
+                <option value="">{t("-- Chagua Mwendeshaji --", "-- Select Operator --")}</option>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>
+                    {tenant.name} ({tenant.slug})
                   </option>
                 ))}
               </select>
               <p className="text-[11px] text-gray-400">
-                Ombi hili litahusishwa na akaunti ya mwendeshaji huyu wa Wi-Fi.
+                {t("Ombi hili litahusishwa na akaunti ya mwendeshaji huyu wa Wi-Fi.", "This request will be linked to this Wi-Fi operator's account.")}
               </p>
             </div>
           )}
 
           <div>
             <label className="text-xs font-semibold text-gray-300 block mb-2">
-              Njia ya Usanidi / How should the device be set up? *
+              {t("Njia ya Usanidi *", "Setup Method *")}
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[
-                { id: "PHYSICAL_HANDOVER", title: "Nitatuma Kifaa / Send device to PoaFi", desc: "Post the router to the PoaFi admin. It is configured, tested and sent back ready to plug in." },
-                { id: "REMOTE", title: "Nitasanidi Mwenyewe / I will set it up remotely", desc: "Use Quick Setup on the Routers page: paste one script and the device registers itself." },
+                {
+                  id: "PHYSICAL_HANDOVER",
+                  title: t("Nitatuma Kifaa Kwa PoaFi", "Send physical device to PoaFi"),
+                  desc: t(
+                    "Tuma router kwa msimamizi wa PoaFi. Itasanidiwa, itajaribiwa na kurudishwa tayari kuunganishwa.",
+                    "Post the router to the PoaFi admin. It is configured, tested and sent back ready to plug in.",
+                  ),
+                },
+                {
+                  id: "REMOTE",
+                  title: t("Nitasanidi Kwa Mbali", "I will set it up remotely"),
+                  desc: t(
+                    "Tumia Quick Setup kwenye ukurasa wa Routers: bandika script moja na kifaa kitajisajili chenyewe.",
+                    "Use Quick Setup on the Routers page: paste one script and the device registers itself.",
+                  ),
+                },
               ].map((opt) => (
                 <div
                   key={opt.id}
@@ -340,53 +380,53 @@ export default function DeviceSetupPage() {
 
           <div>
             <label className="text-xs font-semibold text-gray-300 block mb-1">
-              Jina la Kifaa (Device Name) *
+              {t("Jina la Kifaa *", "Device Name *")}
             </label>
             <input
               required
               value={deviceName}
               onChange={(e) => setDeviceName(e.target.value)}
-              placeholder="mfano: MikroTik hEX S - Hotspot ya Sokoni"
+              placeholder={t("mfano: MikroTik hEX S - Hotspot ya Sokoni", "e.g. MikroTik hEX S - Market Hotspot")}
               className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl p-3 text-sm text-white focus:border-[#00f3ff] outline-none"
             />
           </div>
 
           <div>
             <label className="text-xs font-semibold text-gray-300 block mb-1">
-              Aina ya Kifaa / Brand Vendor *
+              {t("Aina ya Kifaa (Mtengenezaji) *", "Device Brand / Vendor *")}
             </label>
             <select
               value={deviceVendor}
               onChange={(e) => setDeviceVendor(e.target.value)}
               className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl p-3 text-sm text-white focus:border-[#00f3ff] outline-none"
             >
-              <option value="MIKROTIK">MikroTik RouterOS (Live API + Quick Setup)</option>
-              <option value="TPLINK_OMADA">TP-Link Omada (Live Controller API + RADIUS)</option>
-              <option value="UBIQUITI_UNIFI">Ubiquiti UniFi (RADIUS / Controller Planned)</option>
-              <option value="RUIJIE">Ruijie / Reyee (RADIUS / Cloud Planned)</option>
-              <option value="CUDY">Cudy (RADIUS / AP Only)</option>
-              <option value="COMFAST">Comfast (RADIUS / AP Only)</option>
-              <option value="WAVLINK">Wavlink (RADIUS / AP Only)</option>
-              <option value="GENERIC">Other / RADIUS Only</option>
+              <option value="MIKROTIK">{t("MikroTik RouterOS (API ya Moja kwa Moja + Usanidi wa Haraka)", "MikroTik RouterOS (Live API + Quick Setup)")}</option>
+              <option value="TPLINK_OMADA">{t("TP-Link Omada (API ya Kidhibiti + RADIUS)", "TP-Link Omada (Live Controller API + RADIUS)")}</option>
+              <option value="UBIQUITI_UNIFI">{t("Ubiquiti UniFi (RADIUS / Kidhibiti Inayopangwa)", "Ubiquiti UniFi (RADIUS / Controller Planned)")}</option>
+              <option value="RUIJIE">{t("Ruijie / Reyee (RADIUS / Wingu Inayopangwa)", "Ruijie / Reyee (RADIUS / Cloud Planned)")}</option>
+              <option value="CUDY">{t("Cudy (RADIUS / AP Pekee)", "Cudy (RADIUS / AP Only)")}</option>
+              <option value="COMFAST">{t("Comfast (RADIUS / AP Pekee)", "Comfast (RADIUS / AP Only)")}</option>
+              <option value="WAVLINK">{t("Wavlink (RADIUS / AP Pekee)", "Wavlink (RADIUS / AP Only)")}</option>
+              <option value="GENERIC">{t("Nyingine / RADIUS Pekee", "Other / RADIUS Only")}</option>
             </select>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="text-xs font-semibold text-gray-300 block mb-1">Serial Number</label>
+              <label className="text-xs font-semibold text-gray-300 block mb-1">{t("Namba ya Kifaa (Serial Number)", "Serial Number")}</label>
               <input
                 value={serialNumber}
                 onChange={(e) => setSerialNumber(e.target.value)}
-                placeholder="Printed on the router label"
+                placeholder={t("Imeandikwa kwenye stika ya router", "Printed on the router label")}
                 className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl p-3 text-sm text-white focus:border-[#00f3ff] outline-none"
               />
             </div>
             <div>
-              <label className="text-xs font-semibold text-gray-300 block mb-1">MAC Address</label>
+              <label className="text-xs font-semibold text-gray-300 block mb-1">{t("Anwani ya MAC (MAC Address)", "MAC Address")}</label>
               <input
                 value={macAddress}
                 onChange={(e) => setMacAddress(e.target.value)}
-                placeholder="e.g. 4C:5E:0C:12:34:56"
+                placeholder={t("mfano: 4C:5E:0C:12:34:56", "e.g. 4C:5E:0C:12:34:56")}
                 className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl p-3 text-sm text-white focus:border-[#00f3ff] outline-none"
               />
             </div>
@@ -395,12 +435,12 @@ export default function DeviceSetupPage() {
           {requestType === "PHYSICAL_HANDOVER" && (
             <div>
               <label className="text-xs font-semibold text-gray-300 block mb-1">
-                Courier / Delivery Details (bus company, parcel number, phone) 
+                {t("Maelezo ya Usafirishaji (kampuni ya basi, namba ya kifurushi, simu)", "Courier / Delivery Details (bus company, parcel number, phone)")}
               </label>
               <input
                 value={courierInfo}
                 onChange={(e) => setCourierInfo(e.target.value)}
-                placeholder="e.g. Abood Bus, parcel #1234, driver 07xx xxx xxx"
+                placeholder={t("mfano: Abood Bus, kifurushi #1234, dereva 07xx xxx xxx", "e.g. Abood Bus, parcel #1234, driver 07xx xxx xxx")}
                 className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl p-3 text-sm text-white focus:border-[#00f3ff] outline-none"
               />
             </div>
@@ -408,13 +448,16 @@ export default function DeviceSetupPage() {
 
           <div>
             <label className="text-xs font-semibold text-gray-300 block mb-1">
-              Maelekezo au Maelezo ya Msaada unaohitajika (Notes / Instructions) *
+              {t("Maelekezo au Maelezo ya Msaada Unaohitajika *", "Notes / Setup Instructions *")}
             </label>
             <textarea
               required
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Eleza kwa ufupi unachotaka kusanidiwa (mfano: Kuunganisha captive portal, kugawa IP pool, usanidi wa Mesh APs...)"
+              placeholder={t(
+                "Eleza kwa ufupi unachotaka kusanidiwa (mfano: Kuunganisha captive portal, kugawa IP pool, usanidi wa Mesh APs...)",
+                "Briefly describe what needs setup (e.g. Connect captive portal, assign IP pool, configure Mesh APs...)"
+              )}
               className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl p-3 text-sm text-white focus:border-[#00f3ff] outline-none min-h-[100px]"
             />
           </div>
@@ -424,7 +467,11 @@ export default function DeviceSetupPage() {
             disabled={submitting}
             className="w-full bg-gradient-to-r from-[#00f3ff] to-[#9d00ff] text-white font-bold py-3 rounded-xl text-sm disabled:opacity-50 transition-opacity hover:opacity-90 shadow-lg shadow-[#00f3ff]/20"
           >
-            {submitting ? "Inawasilisha..." : isSuperAdmin ? "Hifadhi Ombi la Msaada" : "Tuma Ombi la Msaada"}
+            {submitting
+              ? t("Inawasilisha...", "Submitting...")
+              : isSuperAdmin
+                ? t("Hifadhi Ombi la Msaada", "Save Setup Assistance")
+                : t("Tuma Ombi la Msaada", "Submit Setup Request")}
           </button>
         </form>
       )}
@@ -434,18 +481,18 @@ export default function DeviceSetupPage() {
         <div className="p-4 border-b border-white/10 flex items-center justify-between">
           <h2 className="font-bold text-white flex items-center gap-2">
             <Clock size={18} className="text-[#00f3ff]" />
-            <span>Historia ya Maombi / Setup Requests ({requests.length})</span>
+            <span>{t("Historia ya Maombi ya Usanidi", "Setup Requests History")} ({requests.length})</span>
           </h2>
         </div>
 
         {loading ? (
           <div className="p-12 text-center text-gray-400 text-sm">
             <div className="w-8 h-8 border-2 border-[#00f3ff] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-            <p>Inapakia maombi...</p>
+            <p>{t("Inapakia maombi...", "Loading requests...")}</p>
           </div>
         ) : requests.length === 0 ? (
           <div className="p-12 text-center text-gray-400 text-sm">
-            Hakuna maombi ya kusanidi vifaa yaliyopatikana.
+            {t("Hakuna maombi ya kusanidi vifaa yaliyopatikana.", "No device setup requests found.")}
           </div>
         ) : (
           <div className="divide-y divide-white/5">
@@ -453,7 +500,7 @@ export default function DeviceSetupPage() {
               <div key={req.id} className="p-5 space-y-3 hover:bg-white/[0.02] transition-colors">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                   <div className="flex items-center gap-2.5 flex-wrap">
-                    <p className="font-bold text-white text-base">{req.deviceName || "Kifaa Kisicho na Jina"}</p>
+                    <p className="font-bold text-white text-base">{req.deviceName || t("Kifaa Kisicho na Jina", "Unnamed Device")}</p>
                     <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-white/10 text-[#00f3ff] border border-white/10">
                       {req.deviceVendor || "GENERIC"}
                     </span>
@@ -461,26 +508,28 @@ export default function DeviceSetupPage() {
                     {/* Status Badge */}
                     {req.status === "PENDING" && (
                       <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 flex items-center gap-1">
-                        <Clock size={12} /> Inasubiri / Pending
+                        <Clock size={12} /> {t("Inasubiri", "Pending")}
                       </span>
                     )}
                     {req.status === "IN_PROGRESS" && (
                       <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 flex items-center gap-1 animate-pulse">
-                        <Wrench size={12} /> Inashughulikiwa / In Progress
+                        <Wrench size={12} /> {t("Inashughulikiwa", "In Progress")}
                       </span>
                     )}
                     {req.status === "COMPLETED" && (
                       <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-green-500/20 text-green-300 border border-green-500/30 flex items-center gap-1">
-                        <CheckCircle2 size={12} /> Imekamilika / Completed
+                        <CheckCircle2 size={12} /> {t("Imekamilika", "Completed")}
                       </span>
                     )}
                     {["DEVICE_RECEIVED", "CONFIGURED", "SHIPPED_BACK", "CANCELLED"].includes(req.status) && (
                       <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                        {STATUS_LABELS[req.status]}
+                        {t(STATUS_LABELS[req.status].sw, STATUS_LABELS[req.status].en)}
                       </span>
                     )}
                     <span className="text-[10px] text-gray-400 border border-white/10 rounded-full px-2 py-0.5">
-                      {TYPE_LABELS[req.requestType] || req.requestType}
+                      {TYPE_LABELS[req.requestType]
+                        ? t(TYPE_LABELS[req.requestType].sw, TYPE_LABELS[req.requestType].en)
+                        : req.requestType}
                     </span>
                   </div>
 
@@ -493,7 +542,7 @@ export default function DeviceSetupPage() {
                           className="bg-[#00f3ff]/15 hover:bg-[#00f3ff]/25 text-[#00f3ff] border border-[#00f3ff]/30 px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors w-fit"
                         >
                           <Server size={13} />
-                          <span>Register this device</span>
+                          <span>{t("Sajili kifaa hiki", "Register this device")}</span>
                         </Link>
                       )}
                       <button
@@ -505,7 +554,7 @@ export default function DeviceSetupPage() {
                         className="bg-white/10 hover:bg-white/20 text-white px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors w-fit"
                       >
                         <Edit3 size={13} className="text-[#00f3ff]" />
-                        <span>Sasisha / Assist Operator</span>
+                        <span>{t("Sasisha Msaada", "Assist Operator")}</span>
                       </button>
                     </div>
                   )}
@@ -515,7 +564,7 @@ export default function DeviceSetupPage() {
                   {req.tenant && (
                     <div className="flex items-center gap-2 text-xs text-gray-300 bg-white/5 px-3 py-1.5 rounded-lg w-fit border border-white/5">
                       <Building2 size={13} className="text-[#00f3ff]" />
-                      <span>Operator:</span>
+                      <span>{t("Mwendeshaji:", "Operator:")}</span>
                       <strong className="text-white">{req.tenant.name}</strong>
                       <code className="text-[#00f3ff] text-[10px] bg-black/40 px-1.5 py-0.5 rounded">{req.tenant.slug}</code>
                     </div>
@@ -532,7 +581,7 @@ export default function DeviceSetupPage() {
                   )}
                   {req.router && (
                     <span className="text-xs text-green-300 bg-green-500/10 px-2.5 py-1.5 rounded-lg border border-green-500/20 flex items-center gap-1.5">
-                      <Server size={12} /> Linked Router: <strong>{req.router.name}</strong> ({req.router.host})
+                      <Server size={12} /> {t("Router Iliyounganishwa:", "Linked Router:")} <strong>{req.router.name}</strong> ({req.router.host})
                     </span>
                   )}
                 </div>
@@ -540,7 +589,7 @@ export default function DeviceSetupPage() {
                 {/* Operator Notes */}
                 {req.notes && (
                   <p className="text-xs text-gray-300 bg-black/30 p-2.5 rounded-xl border border-white/5">
-                    <strong>Maelezo ya Operator:</strong> {req.notes}
+                    <strong>{t("Maelezo ya Mwendeshaji:", "Operator Notes:")}</strong> {req.notes}
                   </p>
                 )}
 
@@ -549,16 +598,16 @@ export default function DeviceSetupPage() {
                   <div className="text-xs text-emerald-300 bg-emerald-500/10 p-2.5 rounded-xl border border-emerald-500/20 space-y-1">
                     <div className="flex items-center gap-1.5 font-bold">
                       <CheckCircle2 size={13} />
-                      <span>Maelekezo ya Mhandisi / Engineer Notes:</span>
+                      <span>{t("Maelekezo ya Mhandisi:", "Engineer Notes:")}</span>
                     </div>
                     <p className="text-gray-200">{req.adminNotes}</p>
                   </div>
                 )}
 
                 <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1">
-                  <span>Iliwasilishwa: {new Date(req.createdAt).toLocaleString()}</span>
+                  <span>{t("Iliwasilishwa:", "Submitted:")} {new Date(req.createdAt).toLocaleString()}</span>
                   {req.assignedTo && (
-                    <span>Mhandisi: {req.assignedTo.email}</span>
+                    <span>{t("Mhandisi:", "Engineer:")} {req.assignedTo.email}</span>
                   )}
                 </div>
               </div>
@@ -573,41 +622,44 @@ export default function DeviceSetupPage() {
           <div className="glass-panel p-6 rounded-2xl max-w-lg w-full border border-white/20 shadow-2xl space-y-4">
             <h3 className="text-lg font-bold text-white flex items-center gap-2">
               <Wrench className="text-[#00f3ff]" />
-              <span>Sasisha Msaada: {assistingRequest.deviceName}</span>
+              <span>{t("Sasisha Msaada:", "Update Request:")} {assistingRequest.deviceName}</span>
             </h3>
 
             {assistingRequest.tenant && (
               <p className="text-xs text-gray-400">
-                Operator: <strong className="text-white">{assistingRequest.tenant.name}</strong> ({assistingRequest.tenant.slug})
+                {t("Mwendeshaji:", "Operator:")} <strong className="text-white">{assistingRequest.tenant.name}</strong> ({assistingRequest.tenant.slug})
               </p>
             )}
 
             <form onSubmit={handleUpdateStatus} className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-gray-300 block mb-1">Hali ya Msaada (Status):</label>
+                <label className="text-xs font-semibold text-gray-300 block mb-1">{t("Hali ya Msaada:", "Request Status:")}</label>
                 <select
                   value={updateStatus}
                   onChange={(e) => setUpdateStatus(e.target.value)}
                   className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl p-2.5 text-xs text-white focus:border-[#00f3ff] outline-none"
                 >
-                  <option value="PENDING">Inasubiri / Waiting for device (PENDING)</option>
-                  <option value="DEVICE_RECEIVED">Kifaa Kimepokelewa / Device received</option>
-                  <option value="IN_PROGRESS">Inashughulikiwa / Being configured (IN_PROGRESS)</option>
-                  <option value="CONFIGURED">Imesanidiwa / Configured, ready to send back</option>
-                  <option value="SHIPPED_BACK">Imetumwa Kwa Operator / Shipped back to operator</option>
-                  <option value="COMPLETED">Imekamilika / Completed (installed &amp; online)</option>
-                  <option value="CANCELLED">Imeghairiwa / Cancelled</option>
+                  <option value="PENDING">{t("Inasubiri kifaa (PENDING)", "Waiting for device (PENDING)")}</option>
+                  <option value="DEVICE_RECEIVED">{t("Kifaa kimepokelewa", "Device received")}</option>
+                  <option value="IN_PROGRESS">{t("Inashughulikiwa (IN_PROGRESS)", "Being configured (IN_PROGRESS)")}</option>
+                  <option value="CONFIGURED">{t("Imesanidiwa, tayari kurudishwa", "Configured, ready to send back")}</option>
+                  <option value="SHIPPED_BACK">{t("Imetumwa kwa mwendeshaji", "Shipped back to operator")}</option>
+                  <option value="COMPLETED">{t("Imekamilika (imefungwa na iko mtandaoni)", "Completed (installed & online)")}</option>
+                  <option value="CANCELLED">{t("Imeghairiwa", "Cancelled")}</option>
                 </select>
               </div>
 
               <div>
                 <label className="text-xs font-semibold text-gray-300 block mb-1">
-                  Maelekezo ya Mhandisi / Admin Configuration Notes:
+                  {t("Maelekezo ya Mhandisi kwa Mwendeshaji:", "Engineer Configuration Notes:")}
                 </label>
                 <textarea
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
-                  placeholder="Eleza hatua zilizochukuliwa, script iliyotumiwa, au maelekezo kwa ajili ya operator..."
+                  placeholder={t(
+                    "Eleza hatua zilizochukuliwa, script iliyotumiwa, au maelekezo kwa ajili ya mwendeshaji...",
+                    "Describe steps taken, script used, or instructions for the operator..."
+                  )}
                   className="w-full bg-[#0a0a1a] border border-white/10 rounded-xl p-3 text-xs text-white focus:border-[#00f3ff] outline-none min-h-[100px]"
                 />
               </div>
@@ -618,14 +670,14 @@ export default function DeviceSetupPage() {
                   onClick={() => setAssistingRequest(null)}
                   className="flex-1 bg-white/10 hover:bg-white/20 py-2.5 rounded-xl text-xs font-semibold text-gray-300 transition-colors"
                 >
-                  Close
+                  {t("Funga", "Close")}
                 </button>
                 <button
                   type="submit"
                   disabled={updating}
                   className="flex-1 bg-gradient-to-r from-[#00f3ff] to-[#9d00ff] text-white font-bold py-2.5 rounded-xl text-xs hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
-                  {updating ? "Inasasisha..." : "Hifadhi Mabadiliko"}
+                  {updating ? t("Inasasisha...", "Updating...") : t("Hifadhi Mabadiliko", "Save Changes")}
                 </button>
               </div>
             </form>

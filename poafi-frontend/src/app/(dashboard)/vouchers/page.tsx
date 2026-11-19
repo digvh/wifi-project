@@ -1,16 +1,21 @@
 "use client";
 import { useState, useEffect } from "react";
+import QRCode from "qrcode";
 import { apiFetch } from "@/lib/api";
-import { Ticket, Printer, RefreshCw, Trash2, CheckCircle2, ShieldAlert, Sparkles, Grid } from "lucide-react";
+import { Ticket, Printer, RefreshCw, Trash2, CheckCircle2, ShieldAlert, Sparkles } from "lucide-react";
+import { useLanguage } from "@/context/LanguageContext";
 
 export default function VouchersPage() {
+  const { t } = useLanguage();
   const [vouchers, setVouchers] = useState<any[]>([]);
   const [packages, setPackages] = useState<any[]>([]);
+  const [tenantSlug, setTenantSlug] = useState("tanga");
   const [selectedPackage, setSelectedPackage] = useState("");
   const [quantity, setQuantity] = useState("10");
   const [codeLength, setCodeLength] = useState("8");
   const [codeFormat, setCodeFormat] = useState<"ALPHANUMERIC" | "NUMBERS">("ALPHANUMERIC");
   const [generatedBatch, setGeneratedBatch] = useState<any>(null);
+  const [qrMap, setQrMap] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -20,10 +25,14 @@ export default function VouchersPage() {
 
   const fetchData = async () => {
     try {
-      const [packagesData, vouchersData] = await Promise.all([
+      const [packagesData, vouchersData, settingsData] = await Promise.all([
         apiFetch("/packages"),
         apiFetch(`/vouchers?page=${page}&limit=20${statusFilter ? `&status=${statusFilter}` : ""}`),
+        apiFetch("/tenants/settings").catch(() => null),
       ]);
+      if (settingsData?.tenant?.slug) {
+        setTenantSlug(settingsData.tenant.slug);
+      }
       setPackages(packagesData.packages || []);
       if (packagesData.packages && packagesData.packages.length > 0 && !selectedPackage) {
         setSelectedPackage(packagesData.packages[0].id);
@@ -49,7 +58,16 @@ export default function VouchersPage() {
         body: JSON.stringify({ packageId: selectedPackage, quantity, codeLength: Number(codeLength), codeFormat }),
       });
       setGeneratedBatch(res);
-      setSuccess(`Successfully generated ${res.count} vouchers!`);
+      const origin = typeof window !== "undefined" ? window.location.origin : "https://app.poafi.co.tz";
+      const entries = await Promise.all(
+        (res.codes || []).map(async (code: string) => {
+          const url = `${origin}/portal?tenant=${encodeURIComponent(tenantSlug)}&voucher=${encodeURIComponent(code)}`;
+          const dataUrl = await QRCode.toDataURL(url, { width: 140, margin: 1 });
+          return [code, dataUrl] as const;
+        })
+      );
+      setQrMap(Object.fromEntries(entries));
+      setSuccess(t(`Umefanikiwa kuunda vocha ${res.count}!`, `Successfully generated ${res.count} vouchers!`));
       fetchData();
     } catch (err: any) {
       setError(err.message);
@@ -57,17 +75,15 @@ export default function VouchersPage() {
   };
 
   const handleDeleteBatch = async (batchId: string) => {
-    if (!confirm("Are you sure you want to delete this voucher batch?")) return;
+    if (!confirm(t("Una uhakika unataka kufuta kundi hili la vocha?", "Are you sure you want to delete this voucher batch?"))) return;
     try {
       await apiFetch(`/vouchers/batch/${batchId}`, { method: "DELETE" });
-      setSuccess("Batch deleted successfully");
+      setSuccess(t("Kundi la vocha limefutwa", "Batch deleted successfully"));
       fetchData();
     } catch (err: any) {
       setError(err.message);
     }
   };
-
-  const selectedPkgMeta = packages.find((p) => p.id === selectedPackage);
 
   return (
     <div className="space-y-6 max-w-[1600px] mx-auto">
@@ -75,10 +91,10 @@ export default function VouchersPage() {
       <div className="print:hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2">
-            <Ticket className="text-[#00f3ff]" /> Voucher Generator & POS Thermal Printing
+            <Ticket className="text-[#00f3ff]" /> {t("Uzalishaji wa Vocha & Risiti", "Voucher Generator & POS Printing")}
           </h1>
           <p className="text-gray-400 text-sm mt-1">
-            Create batches of high-security 8-character codes and print professional retail thermal receipts.
+            {t("Unda makundi ya vocha zenye usalama wa hali ya juu na uchapishe risiti.", "Create batches of high-security voucher codes and print retail thermal receipts.")}
           </p>
         </div>
 
@@ -86,7 +102,7 @@ export default function VouchersPage() {
           onClick={fetchData}
           className="bg-white/5 hover:bg-white/10 text-gray-300 text-xs px-3.5 py-2 rounded-xl flex items-center gap-2 border border-white/10"
         >
-          <RefreshCw size={14} /> Refresh
+          <RefreshCw size={14} /> {t("Sasisha", "Refresh")}
         </button>
       </div>
 
@@ -106,18 +122,18 @@ export default function VouchersPage() {
         {/* Generator Form */}
         <div className="glass-panel p-6 h-fit space-y-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
-            <Sparkles size={18} className="text-[#00f3ff]" /> Generate Voucher Batch
+            <Sparkles size={18} className="text-[#00f3ff]" /> {t("Unda Kundi la Vocha", "Generate Voucher Batch")}
           </h2>
           <form onSubmit={handleGenerate} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Select Package</label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">{t("Chagua Kifurushi", "Select Package")}</label>
               <select
                 value={selectedPackage}
                 onChange={(e) => setSelectedPackage(e.target.value)}
                 className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white outline-none focus:border-[#00f3ff] text-sm"
                 required
               >
-                <option value="" disabled>Select Package...</option>
+                <option value="" disabled>{t("Chagua kifurushi...", "Select Package...")}</option>
                 {packages.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.name} — TZS {p.priceTzs.toLocaleString()} ({p.durationMinutes}m)
@@ -127,10 +143,10 @@ export default function VouchersPage() {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Batch Quantity (Codes to generate)</label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">{t("Idadi ya Vocha", "Batch Quantity (Codes to generate)")}</label>
               <input
                 type="number"
-                placeholder="Quantity (e.g. 50)"
+                placeholder={t("Idadi (mfano 50)", "Quantity (e.g. 50)")}
                 value={quantity}
                 onChange={(e) => setQuantity(e.target.value)}
                 className="w-full bg-white/5 border border-white/10 rounded-lg p-3 text-white outline-none focus:border-[#00f3ff] text-sm"
@@ -138,21 +154,21 @@ export default function VouchersPage() {
                 min="1"
                 max="500"
               />
-              <p className="text-[10px] text-gray-400 mt-1">Maximum 500 vouchers per batch.</p>
+              <p className="text-[10px] text-gray-400 mt-1">{t("Kiwango cha juu ni vocha 500 kwa kundi moja.", "Maximum 500 vouchers per batch.")}</p>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Code Length</label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">{t("Urefu wa Kodi", "Code Length")}</label>
                 <select value={codeLength} onChange={(e) => setCodeLength(e.target.value)} className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white text-sm">
-                  {[6, 7, 8, 9, 10, 12, 16].map((n) => <option key={n} value={n}>{n} characters</option>)}
+                  {[6, 7, 8, 9, 10, 12, 16].map((n) => <option key={n} value={n}>{n} {t("herufi", "characters")}</option>)}
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-400 mb-1">Code Format</label>
+                <label className="block text-xs font-medium text-gray-400 mb-1">{t("Muundo wa Kodi", "Code Format")}</label>
                 <select value={codeFormat} onChange={(e) => setCodeFormat(e.target.value as "ALPHANUMERIC" | "NUMBERS")} className="w-full bg-[#0a0a1a] border border-white/10 rounded-lg p-3 text-white text-sm">
-                  <option value="ALPHANUMERIC">Letters + numbers</option>
-                  <option value="NUMBERS">Numbers only</option>
+                  <option value="ALPHANUMERIC">{t("Herufi + Namba", "Letters + numbers")}</option>
+                  <option value="NUMBERS">{t("Namba Pekee", "Numbers only")}</option>
                 </select>
               </div>
             </div>
@@ -161,7 +177,7 @@ export default function VouchersPage() {
               type="submit"
               className="w-full bg-gradient-to-r from-[#00f3ff] to-[#9d00ff] text-white font-bold py-3 rounded-lg hover:opacity-90 transition-opacity text-sm shadow-lg"
             >
-              Generate {quantity} Voucher Codes
+              {t(`Zalisha Vocha ${quantity}`, `Generate ${quantity} Voucher Codes`)}
             </button>
           </form>
 
@@ -170,7 +186,7 @@ export default function VouchersPage() {
             <div className="mt-6 border-t border-white/10 pt-4 space-y-3">
               <div className="flex justify-between items-center">
                 <span className="text-xs font-bold text-green-400">
-                  Ready: {generatedBatch.codes.length} Codes
+                  {t("Tayari:", "Ready:")} {generatedBatch.codes.length} {t("Kodi", "Codes")}
                 </span>
 
                 <div className="flex gap-2">
@@ -188,13 +204,13 @@ export default function VouchersPage() {
                       printLayout === "grid" ? "bg-[#00f3ff] text-black font-bold" : "bg-white/10 text-gray-300"
                     }`}
                   >
-                    A4 Grid
+                    {t("Mpangilio wa A4", "A4 Grid")}
                   </button>
                   <button
                     onClick={() => window.print()}
                     className="bg-white text-black font-bold text-xs px-3 py-1 rounded flex items-center gap-1.5 shadow"
                   >
-                    <Printer size={13} /> Print
+                    <Printer size={13} /> {t("Chapisha", "Print")}
                   </button>
                 </div>
               </div>
@@ -213,16 +229,16 @@ export default function VouchersPage() {
         {/* Voucher History Table */}
         <div className="glass-panel p-6 lg:col-span-2 space-y-4">
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-            <h2 className="text-lg font-semibold">Voucher Inventory</h2>
+            <h2 className="text-lg font-semibold">{t("Hifadhi ya Vocha", "Voucher Inventory")}</h2>
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="bg-[#0a0a1a] border border-white/10 rounded-lg p-2 text-xs text-white outline-none"
             >
-              <option value="">All Vouchers</option>
-              <option value="UNUSED">Unused Only (In Stock)</option>
-              <option value="ACTIVE">Active (Currently Browsing)</option>
-              <option value="EXPIRED">Expired</option>
+              <option value="">{t("Vocha Zote", "All Vouchers")}</option>
+              <option value="UNUSED">{t("Hazijatumika (Ziko Hifadhini)", "Unused Only (In Stock)")}</option>
+              <option value="ACTIVE">{t("Zinatumika Sasa", "Active (Currently Browsing)")}</option>
+              <option value="EXPIRED">{t("Zimekwisha Muda", "Expired")}</option>
             </select>
           </div>
 
@@ -230,12 +246,12 @@ export default function VouchersPage() {
             <table className="w-full text-left text-sm">
               <thead className="bg-white/5 text-gray-400 text-xs uppercase">
                 <tr>
-                  <th className="p-3">Package</th>
-                  <th className="p-3">Price</th>
-                  <th className="p-3">Status</th>
-                  <th className="p-3">Batch ID</th>
-                  <th className="p-3">Created</th>
-                  <th className="p-3">Action</th>
+                  <th className="p-3">{t("Kifurushi", "Package")}</th>
+                  <th className="p-3">{t("Bei", "Price")}</th>
+                  <th className="p-3">{t("Hali", "Status")}</th>
+                  <th className="p-3">{t("Kundi", "Batch ID")}</th>
+                  <th className="p-3">{t("Tarehe", "Created")}</th>
+                  <th className="p-3">{t("Hatua", "Action")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
@@ -261,7 +277,11 @@ export default function VouchersPage() {
                               : "bg-gray-500/20 text-gray-400"
                           }`}
                         >
-                          {v.status}
+                          {isUnused
+                            ? t("Haijatumika", "Unused")
+                            : isActive
+                            ? t("Inatumika", "Active")
+                            : t("Imekwisha", "Expired")}
                         </span>
                       </td>
                       <td className="p-3 font-mono text-xs text-gray-400">
@@ -274,7 +294,7 @@ export default function VouchersPage() {
                         <button
                           onClick={() => handleDeleteBatch(v.batchId)}
                           className="text-red-400 hover:text-red-300 p-1.5"
-                          title="Delete entire batch"
+                          title={t("Futa kundi zima", "Delete entire batch")}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -288,21 +308,21 @@ export default function VouchersPage() {
 
           {totalPages > 1 && (
             <div className="flex justify-between items-center pt-3 text-xs text-gray-400 border-t border-white/5">
-              <span>Page {page} of {totalPages}</span>
+              <span>{t(`Ukurasa ${page} kati ya ${totalPages}`, `Page ${page} of ${totalPages}`)}</span>
               <div className="flex gap-2">
                 <button
                   disabled={page <= 1}
                   onClick={() => setPage(page - 1)}
                   className="bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded disabled:opacity-30"
                 >
-                  Previous
+                  {t("Nyuma", "Previous")}
                 </button>
                 <button
                   disabled={page >= totalPages}
                   onClick={() => setPage(page + 1)}
                   className="bg-white/5 hover:bg-white/10 px-3 py-1.5 rounded disabled:opacity-30"
                 >
-                  Next
+                  {t("Mbele", "Next")}
                 </button>
               </div>
             </div>
@@ -323,15 +343,21 @@ export default function VouchersPage() {
                 style={{ breakInside: "avoid" }}
               >
                 <div className="border-b border-black pb-1.5">
-                  <h3 className="font-extrabold text-base tracking-tight uppercase">PoaFi High-Speed Wi-Fi</h3>
-                  <p className="text-[10px] uppercase font-semibold">Tanzania Carrier Network</p>
+                  <h3 className="font-extrabold text-base tracking-tight uppercase">{t("PoaFi Wi-Fi ya Kasi", "PoaFi High-Speed Wi-Fi")}</h3>
+                  <p className="text-[10px] uppercase font-semibold">{t("Mtandao wa Tanzania", "Tanzania Carrier Network")}</p>
                 </div>
 
                 <div>
-                  <span className="text-[10px] text-gray-700 uppercase font-medium">Wi-Fi Voucher Code</span>
+                  <span className="text-[10px] text-gray-700 uppercase font-medium">{t("Kodi ya Vocha ya Wi-Fi", "Wi-Fi Voucher Code")}</span>
                   <div className="text-2xl font-mono font-black tracking-widest my-1 border-2 border-black py-1 px-2 rounded bg-gray-50">
                     {code}
                   </div>
+                  {qrMap[code] && (
+                    <div className="flex flex-col items-center pt-1">
+                      <img src={qrMap[code]} alt={`QR ${code}`} className="w-24 h-24 border border-gray-300 rounded p-0.5 bg-white" />
+                      <span className="text-[8px] text-gray-600 mt-0.5">{t("Changanua kuingia haraka", "Scan for instant login")}</span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="text-xs font-semibold space-y-0.5 border-t border-black pt-1.5">
@@ -340,9 +366,9 @@ export default function VouchersPage() {
                 </div>
 
                 <div className="border-t border-gray-300 pt-1 text-[9px] text-gray-600 leading-tight">
-                  <p>1. Unganisha na Wi-Fi ya PoaFi</p>
-                  <p>2. Fungua portal & weka kodi hii</p>
-                  <p className="mt-1 font-mono text-[8px]">Ref: {generatedBatch.batchId.slice(0, 8)} • No. {idx + 1}</p>
+                  <p>{t("1. Unganisha na Wi-Fi ya PoaFi", "1. Connect to PoaFi Wi-Fi")}</p>
+                  <p>{t("2. Fungua portal na weka kodi hii", "2. Open portal & enter this code")}</p>
+                  <p className="mt-1 font-mono text-[8px]">{t("Kumb", "Ref")}: {generatedBatch.batchId.slice(0, 8)} • {t("Na.", "No.")} {idx + 1}</p>
                 </div>
               </div>
             ))}

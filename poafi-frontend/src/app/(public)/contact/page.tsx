@@ -122,7 +122,7 @@ export default function ContactPage() {
             <div className="flex items-center gap-3 text-[#00f3ff]">
               <PhoneCall size={20} />
               <h3 className="font-bold text-white text-base">
-                {lang === "sw" ? "Piga Simu / Call Us" : "Call Our Hotline"}
+                {lang === "sw" ? "Piga Simu" : "Call Our Hotline"}
               </h3>
             </div>
             <p className="text-xs text-gray-400">

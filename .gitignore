@@ -10,6 +10,7 @@ node_modules/
 dist/
 .next/
 out/
+poafi-backend/public/
 
 # IDE
 .vscode/

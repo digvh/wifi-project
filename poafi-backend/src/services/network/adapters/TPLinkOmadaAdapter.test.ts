@@ -6,6 +6,7 @@ import { RouterAdapterFactory } from '../RouterAdapterFactory';
 
 interface MockState {
   users: Array<{ id: string; userName: string; rateLimit: any }>;
+  portals: Array<any>;
   clients: Array<{ id: string; mac: string; ip: string; authUser: string; trafficDown: number; trafficUp: number; authorized: boolean }>;
   kickedMacs: string[];
 }
@@ -59,7 +60,7 @@ function createMockOmadaServer(state: MockState): Promise<{ port: number; close:
           errorCode: 0,
           result: {
             data: [
-              { mac: 'AA-BB-CC-DD-EE-01', name: 'Main ER605', model: 'ER605 v2', type: 'gateway', ip: '192.168.0.1', status: 14 },
+              { mac: 'AA-BB-CC-DD-EE-01', name: 'Main ER605', model: 'ER605 v2', type: 'gateway', ip: '192.168.0.1', status: 14, download: 1500000, upload: 400000 },
               { mac: 'AA-BB-CC-DD-EE-02', name: 'Lobby EAP', model: 'EAP610', type: 'ap', ip: '192.168.0.2', status: 14 },
             ],
           },
@@ -99,6 +100,32 @@ function createMockOmadaServer(state: MockState): Promise<{ port: number; close:
         return;
       }
 
+      if (req.method === 'GET' && url.startsWith(`/${omadacId}/api/v2/sites/site-1/setting/portals`)) {
+        res.end(JSON.stringify({ errorCode: 0, result: { data: state.portals } }));
+        return;
+      }
+
+      if (req.method === 'POST' && url === `/${omadacId}/api/v2/sites/site-1/setting/portals`) {
+        const body = JSON.parse(raw || '{}');
+        const created = { id: `portal-${state.portals.length + 1}`, ...body };
+        state.portals.push(created);
+        res.end(JSON.stringify({ errorCode: 0, result: created }));
+        return;
+      }
+
+      if (req.method === 'PATCH' && url.startsWith(`/${omadacId}/api/v2/sites/site-1/setting/portals/`)) {
+        const id = decodeURIComponent(url.split('/').pop() || '');
+        const body = JSON.parse(raw || '{}');
+        state.portals = state.portals.map((p) => (p.id === id ? { ...p, ...body } : p));
+        res.end(JSON.stringify({ errorCode: 0, result: body }));
+        return;
+      }
+
+      if (req.method === 'POST' && url === `/${omadacId}/api/v2/sites/site-1/setting/portal/freePolicy`) {
+        res.end(JSON.stringify({ errorCode: 0 }));
+        return;
+      }
+
       res.statusCode = 404;
       res.end(JSON.stringify({ errorCode: -1, msg: `Unhandled ${req.method} ${url}` }));
     });
@@ -118,6 +145,7 @@ function createMockOmadaServer(state: MockState): Promise<{ port: number; close:
 test('TPLinkOmadaAdapter connects, discovers devices, manages hotspot users and disconnects clients', async () => {
   const state: MockState = {
     users: [],
+    portals: [],
     clients: [
       { id: 'c-1', mac: '11-22-33-44-55-66', ip: '10.0.0.25', authUser: 'AB12CD34', trafficDown: 1024, trafficUp: 512, authorized: true },
     ],
@@ -165,6 +193,31 @@ test('TPLinkOmadaAdapter connects, discovers devices, manages hotspot users and 
 
     await adapter.removeUser('AB12CD34');
     assert.equal(state.users.length, 0);
+
+    const createdPortal = await adapter.configureHotspotPortal({
+      portalUrl: 'https://app.poafi.co.tz/portal?tenant=tanga',
+      walledGardenDomains: ['pay.custom.tz'],
+    });
+    assert.equal(createdPortal.ok, true);
+    assert.equal(createdPortal.action, 'created');
+    assert.equal(createdPortal.siteId, 'site-1');
+    assert.ok(createdPortal.walledGardenDomains.includes('app.poafi.co.tz'));
+    assert.ok(createdPortal.walledGardenDomains.includes('pay.custom.tz'));
+    assert.equal(state.portals.length, 1);
+
+    const updatedPortal = await adapter.configureHotspotPortal({
+      portalUrl: 'https://app.poafi.co.tz/portal?tenant=arusha',
+    });
+    assert.equal(updatedPortal.action, 'updated');
+    assert.equal(state.portals.length, 1);
+    assert.equal(state.portals[0].landingUrl, 'https://app.poafi.co.tz/portal?tenant=arusha');
+
+    const wan = await adapter.measureWanStats();
+    assert.equal(wan.wanInterface, 'WAN (ER605 v2)');
+    assert.equal(wan.rxMbps, 12);
+    assert.equal(wan.txMbps, 3.2);
+    assert.equal(wan.deviceCount, 2);
+    assert.equal(wan.activeClients, 1);
   } finally {
     await srv.close();
   }

@@ -38,7 +38,7 @@ router.post('/methods', async (req, res) => {
       return;
     }
 
-    const { type, provider, accountNumber, accountName } = req.body;
+    const { type, provider, accountNumber, accountName, bankBic, transferType } = req.body;
     if (!type || !provider || !accountNumber) {
       res.status(400).json({ error: 'Missing required fields' });
       return;
@@ -49,8 +49,16 @@ router.post('/methods', async (req, res) => {
 
     const method = await db.payoutMethod.create({
       data: {
-        tenantId, type, provider, accountNumber, accountName,
-        otpCode, otpExpiresAt, isVerified: false
+        tenantId,
+        type,
+        provider,
+        accountNumber,
+        accountName,
+        bankBic: bankBic || null,
+        transferType: transferType || null,
+        otpCode,
+        otpExpiresAt,
+        isVerified: false
       }
     });
 
@@ -194,7 +202,17 @@ router.get('/balance', async (req, res) => {
     const totalEarned = payments._sum?.amount || 0;
     const totalWithdrawn = withdrawals._sum?.amount || 0;
     
-    res.json({ totalEarned, totalWithdrawn, available: totalEarned - totalWithdrawn });
+    const poafiSetting = await prisma.paymentGatewaySetting.findUnique({
+      where: { tenantId_provider: { tenantId, provider: 'POAFI_PAY' } }
+    });
+    const feePercent = !poafiSetting || poafiSetting.isEnabled ? 3 : 0;
+
+    res.json({
+      totalEarned,
+      totalWithdrawn,
+      available: totalEarned - totalWithdrawn,
+      feePercent,
+    });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch balance' });
   }

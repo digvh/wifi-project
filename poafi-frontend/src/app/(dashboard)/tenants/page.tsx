@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { apiFetch } from "@/lib/api";
+import { useLanguage } from "@/context/LanguageContext";
 import { 
   Trash2, 
   Key, 
@@ -9,14 +10,11 @@ import {
   Building2, 
   Plus, 
   AlertTriangle, 
-  CheckCircle,
-  Router,
-  Wifi,
-  Package,
-  Layers
+  CheckCircle
 } from "lucide-react";
 
 export default function TenantsPage() {
+  const { t } = useLanguage();
   const [tenants, setTenants] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [name, setName] = useState("");
@@ -43,7 +41,7 @@ export default function TenantsPage() {
       const data = await apiFetch("/tenants");
       setTenants(data.tenants || []);
     } catch (err: any) {
-      setError(err.message || "Failed to load operators");
+      setError(err.message || t("Imeshindikana kupakia waendeshaji", "Failed to load operators"));
     } finally {
       setLoading(false);
     }
@@ -64,7 +62,7 @@ export default function TenantsPage() {
       });
       setName("");
       setSlug("");
-      setSuccess("Operator created successfully!");
+      setSuccess(t("Mwendeshaji ameundwa kwa mafanikio!", "Operator created successfully!"));
       fetchTenants();
       setTimeout(() => setSuccess(""), 3000);
     } catch (err: any) {
@@ -79,23 +77,31 @@ export default function TenantsPage() {
 
     try {
       const res = await apiFetch(`/tenants/${deletingTenant.id}`, { method: "DELETE" });
-      setSuccess(res.message || "Operator deleted successfully");
+      setSuccess(res.message || t("Mwendeshaji amefutwa kwa mafanikio", "Operator deleted successfully"));
       setDeletingTenant(null);
       fetchTenants();
       setTimeout(() => setSuccess(""), 4000);
     } catch (err: any) {
-      setDeleteModalError(err.message || "Failed to delete operator");
+      setDeleteModalError(err.message || t("Imeshindikana kufuta mwendeshaji", "Failed to delete operator"));
     } finally {
       setIsDeleting(false);
     }
   };
 
   const handleDeleteLogin = async (tenantId: string, userId: string, email: string) => {
-    if (!confirm(`Delete the login account ${email}? This will NOT delete the Operator, routers, packages or business records.`)) return;
+    if (
+      !confirm(
+        t(
+          `Futa akaunti ya kuingia ${email}? Hii HAITAFUTA Mwendeshaji, ruta, vifurushi wala kumbukumbu za biashara.`,
+          `Delete the login account ${email}? This will NOT delete the Operator, routers, packages or business records.`
+        )
+      )
+    )
+      return;
     setError("");
     try {
       await apiFetch(`/tenants/${tenantId}/users/${userId}`, { method: "DELETE" });
-      setSuccess(`Login account ${email} deleted.`);
+      setSuccess(t(`Akaunti ya kuingia ${email} imefutwa.`, `Login account ${email} deleted.`));
       fetchTenants();
       setTimeout(() => setSuccess(""), 3000);
     } catch (err: any) {
@@ -113,7 +119,12 @@ export default function TenantsPage() {
         method: "POST",
         body: JSON.stringify({ email: loginEmail, password: loginPassword }),
       });
-      setLoginSuccess("Login created successfully! Give these credentials to the operator.");
+      setLoginSuccess(
+        t(
+          "Akaunti imeundwa kwa mafanikio! Mpatie mwendeshaji taarifa hizi za kuingia.",
+          "Login created successfully! Give these credentials to the operator."
+        )
+      );
       setLoginEmail("");
       setLoginPassword("");
       fetchTenants();
@@ -129,10 +140,10 @@ export default function TenantsPage() {
       <div>
         <h1 className="text-3xl font-bold flex items-center gap-3">
           <Building2 className="text-[#00f3ff] w-8 h-8" />
-          <span>Wi-Fi Operators (Tenants)</span>
+          <span>{t("Waendeshaji wa Wi-Fi (Tenants)", "Wi-Fi Operators (Tenants)")}</span>
         </h1>
         <p className="text-gray-400 text-sm mt-1">
-          Manage hotspot operators, create accounts, and monitor tenant deployments across Tanzania.
+          {t("Simamia waendeshaji wa hotspot, tengeneza akaunti na uangalie mitandao yao nchini.", "Manage hotspot operators, create accounts, and monitor tenant deployments across Tanzania.")}
         </p>
       </div>
 
@@ -155,14 +166,14 @@ export default function TenantsPage() {
         <div className="glass-panel p-6 md:col-span-1 h-fit rounded-2xl border border-white/10 space-y-4">
           <div className="flex items-center gap-2">
             <Plus className="text-[#00f3ff]" />
-            <h2 className="text-lg font-bold text-white">Add New Operator</h2>
+            <h2 className="text-lg font-bold text-white">{t("Ongeza Mwendeshaji Mpya", "Add New Operator")}</h2>
           </div>
           <form onSubmit={handleCreate} className="space-y-4">
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Operator Business Name</label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">{t("Jina la Biashara ya Mwendeshaji", "Operator Business Name")}</label>
               <input
                 type="text"
-                placeholder="e.g. Serengeti Wi-Fi Solutions"
+                placeholder={t("mfano: Serengeti Wi-Fi Solutions", "e.g. Serengeti Wi-Fi Solutions")}
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
@@ -175,10 +186,10 @@ export default function TenantsPage() {
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-400 mb-1">Slug Identifier</label>
+              <label className="block text-xs font-medium text-gray-400 mb-1">{t("Utambulisho (Slug)", "Slug Identifier")}</label>
               <input
                 type="text"
-                placeholder="e.g. serengeti-wifi"
+                placeholder={t("mfano: serengeti-wifi", "e.g. serengeti-wifi")}
                 value={slug}
                 onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ""))}
                 className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white focus:border-[#00f3ff] outline-none font-mono"
@@ -189,7 +200,7 @@ export default function TenantsPage() {
               type="submit"
               className="w-full bg-gradient-to-r from-[#00f3ff] to-[#9d00ff] text-white font-bold py-3 rounded-xl hover:opacity-90 transition-opacity shadow-lg shadow-[#00f3ff]/20 text-sm"
             >
-              Create Operator
+              {t("Unda Mwendeshaji", "Create Operator")}
             </button>
           </form>
         </div>
@@ -197,57 +208,57 @@ export default function TenantsPage() {
         {/* List of Operators */}
         <div className="glass-panel p-6 md:col-span-2 rounded-2xl border border-white/10 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white">Registered Operators ({tenants.length})</h2>
+            <h2 className="text-lg font-bold text-white">{t("Waendeshaji Waliosajiliwa", "Registered Operators")} ({tenants.length})</h2>
           </div>
 
           {loading ? (
             <div className="p-8 text-center text-gray-400">
               <div className="w-8 h-8 border-2 border-[#00f3ff] border-t-transparent rounded-full animate-spin mx-auto mb-2" />
-              <p className="text-xs">Loading operators...</p>
+              <p className="text-xs">{t("Inapakia waendeshaji...", "Loading operators...")}</p>
             </div>
           ) : tenants.length === 0 ? (
-            <p className="text-gray-400 text-sm p-4">No operators registered yet.</p>
+            <p className="text-gray-400 text-sm p-4">{t("Hakuna waendeshaji waliosajiliwa bado.", "No operators registered yet.")}</p>
           ) : (
             <div className="space-y-3">
-              {tenants.map((t) => (
+              {tenants.map((tenant) => (
                 <div
-                  key={t.id}
+                  key={tenant.id}
                   className="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-white/5 p-4 rounded-xl border border-white/5 hover:border-white/10 transition-all gap-4"
                 >
                   <div className="space-y-1">
                     <div className="flex items-center gap-2">
-                      <p className="font-bold text-white text-base">{t.name}</p>
+                      <p className="font-bold text-white text-base">{tenant.name}</p>
                       <code className="text-xs text-[#00f3ff] bg-black/40 px-2 py-0.5 rounded font-mono">
-                        {t.slug}
+                        {tenant.slug}
                       </code>
                     </div>
 
                     {/* Stats pills */}
                     <div className="flex items-center gap-3 text-xs text-gray-400 pt-1">
-                      <span>Routers: <strong className="text-white">{t._count?.routers || 0}</strong></span>
+                      <span>{t("Ruta", "Routers")}: <strong className="text-white">{tenant._count?.routers || 0}</strong></span>
                       <span>•</span>
-                      <span>Packages: <strong className="text-white">{t._count?.packages || 0}</strong></span>
+                      <span>{t("Vifurushi", "Packages")}: <strong className="text-white">{tenant._count?.packages || 0}</strong></span>
                       <span>•</span>
-                      <span>Sites: <strong className="text-white">{t._count?.sites || 0}</strong></span>
+                      <span>{t("Maeneo", "Sites")}: <strong className="text-white">{tenant._count?.sites || 0}</strong></span>
                     </div>
 
                     {/* Users list */}
                     <div className="mt-2 space-y-1">
-                      {(t.users || []).map((account: any) => (
+                      {(tenant.users || []).map((account: any) => (
                         <div key={account.id} className="flex items-center gap-2 text-xs text-gray-300">
                           <span className="text-[#00f3ff] font-medium">{account.email}</span>
                           <span className="text-gray-500 text-[10px]">({account.role})</span>
                           <button
-                            onClick={() => handleDeleteLogin(t.id, account.id, account.email)}
+                            onClick={() => handleDeleteLogin(tenant.id, account.id, account.email)}
                             className="text-red-400 hover:text-red-300 p-0.5 transition-colors"
-                            title="Delete this login account"
+                            title={t("Futa akaunti hii ya kuingia", "Delete this login account")}
                           >
                             <Trash2 size={13} />
                           </button>
                         </div>
                       ))}
-                      {(!t.users || t.users.length === 0) && (
-                        <p className="text-xs text-amber-400">No login account registered</p>
+                      {(!tenant.users || tenant.users.length === 0) && (
+                        <p className="text-xs text-amber-400">{t("Hakuna akaunti ya kuingia iliyosajiliwa", "No login account registered")}</p>
                       )}
                     </div>
                   </div>
@@ -255,24 +266,24 @@ export default function TenantsPage() {
                   <div className="flex gap-2 w-full sm:w-auto shrink-0">
                     <button
                       onClick={() => {
-                        setLoginTenantId(t.id);
+                        setLoginTenantId(tenant.id);
                         setLoginSuccess("");
                       }}
                       className="flex-1 sm:flex-none bg-white/10 hover:bg-white/20 text-white px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Key size={14} className="text-[#00f3ff]" />
-                      <span>Add Login</span>
+                      <span>{t("Ongeza Akaunti", "Add Login")}</span>
                     </button>
                     <button
                       onClick={() => {
-                        setDeletingTenant(t);
+                        setDeletingTenant(tenant);
                         setDeleteModalError("");
                         setDeleteConfirmText("");
                       }}
                       className="flex-1 sm:flex-none bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-3.5 py-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
                     >
                       <Trash2 size={14} />
-                      <span>Delete</span>
+                      <span>{t("Futa", "Delete")}</span>
                     </button>
                   </div>
                 </div>
@@ -291,23 +302,23 @@ export default function TenantsPage() {
                 <AlertTriangle size={24} />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-white">Delete Operator (Cascade)</h3>
+                <h3 className="text-lg font-bold text-white">{t("Futa Mwendeshaji (Yote)", "Delete Operator (Cascade)")}</h3>
                 <p className="text-xs text-red-400 font-mono">{deletingTenant.slug}</p>
               </div>
             </div>
 
             <p className="text-xs text-gray-300 leading-relaxed">
-              Are you sure you want to completely delete operator{" "}
+              {t("Una uhakika unataka kumfuta kabisa mwendeshaji", "Are you sure you want to completely delete operator")}{" "}
               <strong className="text-white">{deletingTenant.name}</strong>?
             </p>
 
             <div className="bg-red-500/10 border border-red-500/30 p-3.5 rounded-xl text-xs text-red-200 space-y-1">
-              <p className="font-semibold text-red-400">The following will be permanently erased:</p>
+              <p className="font-semibold text-red-400">{t("Yafuatayo yatafutwa kabisa:", "The following will be permanently erased:")}</p>
               <ul className="list-disc list-inside space-y-0.5 text-gray-300">
-                <li>{deletingTenant._count?.routers || 0} Router(s) and WireGuard configs</li>
-                <li>{deletingTenant._count?.packages || 0} Package(s) and all Vouchers</li>
-                <li>{deletingTenant._count?.sites || 0} Site(s) and RADIUS clients</li>
-                <li>All operator login accounts & payment history</li>
+                <li>{deletingTenant._count?.routers || 0} {t("Ruta na mipangilio ya WireGuard", "Router(s) and WireGuard configs")}</li>
+                <li>{deletingTenant._count?.packages || 0} {t("Vifurushi na Vocha zote", "Package(s) and all Vouchers")}</li>
+                <li>{deletingTenant._count?.sites || 0} {t("Maeneo na wateja wa RADIUS", "Site(s) and RADIUS clients")}</li>
+                <li>{t("Akaunti zote za kuingia za mwendeshaji na historia ya malipo", "All operator login accounts & payment history")}</li>
               </ul>
             </div>
 
@@ -319,7 +330,7 @@ export default function TenantsPage() {
 
             <div>
               <label className="block text-xs font-medium text-gray-400 mb-1.5">
-                Type <span className="text-red-400 font-mono font-bold">DELETE</span> to confirm:
+                {t("Andika", "Type")} <span className="text-red-400 font-mono font-bold">DELETE</span> {t("kuthibitisha:", "to confirm:")}
               </label>
               <input
                 type="text"
@@ -337,7 +348,7 @@ export default function TenantsPage() {
                 onClick={() => setDeletingTenant(null)}
                 className="flex-1 bg-white/10 hover:bg-white/20 text-gray-300 py-2.5 rounded-xl text-xs font-semibold transition-all"
               >
-                Cancel
+                {t("Ghairi", "Cancel")}
               </button>
               <button
                 type="button"
@@ -346,7 +357,7 @@ export default function TenantsPage() {
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-lg shadow-red-600/30 transition-all disabled:opacity-40"
               >
                 <Trash2 size={15} />
-                <span>{isDeleting ? "Deleting..." : "Delete Operator"}</span>
+                <span>{isDeleting ? t("Inafuta...", "Deleting...") : t("Futa Mwendeshaji", "Delete Operator")}</span>
               </button>
             </div>
           </div>
@@ -357,9 +368,9 @@ export default function TenantsPage() {
       {loginTenantId && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="glass-panel p-6 w-full max-w-md rounded-2xl border border-white/10 shadow-2xl">
-            <h2 className="text-xl font-bold mb-1 text-white">Create Operator Login</h2>
+            <h2 className="text-xl font-bold mb-1 text-white">{t("Unda Akaunti ya Mwendeshaji", "Create Operator Login")}</h2>
             <p className="text-xs text-gray-400 mb-4">
-              Create portal access credentials for this operator.
+              {t("Unda taarifa za kuingia kwenye mfumo kwa mwendeshaji huyu.", "Create portal access credentials for this operator.")}
             </p>
 
             {loginSuccess && (
@@ -371,7 +382,7 @@ export default function TenantsPage() {
 
             <form onSubmit={handleCreateLogin} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-gray-300 mb-1">Operator Email</label>
+                <label className="block text-xs font-medium text-gray-300 mb-1">{t("Barua Pepe ya Mwendeshaji", "Operator Email")}</label>
                 <input
                   type="email"
                   placeholder="operator@poafi.com"
@@ -382,10 +393,10 @@ export default function TenantsPage() {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-gray-300 mb-1">Temporary Password</label>
+                <label className="block text-xs font-medium text-gray-300 mb-1">{t("Nenosiri la Muda", "Temporary Password")}</label>
                 <input
                   type="text"
-                  placeholder="Strong password..."
+                  placeholder={t("Nenosiri imara...", "Strong password...")}
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
                   className="w-full bg-white/5 border border-white/10 rounded-xl p-3 text-sm text-white outline-none focus:border-[#00f3ff]"
@@ -398,14 +409,14 @@ export default function TenantsPage() {
                   onClick={() => setLoginTenantId(null)}
                   className="flex-1 bg-white/10 hover:bg-white/20 py-2.5 rounded-xl text-xs font-semibold text-gray-300 transition-colors"
                 >
-                  Close
+                  {t("Funga", "Close")}
                 </button>
                 <button
                   type="submit"
                   disabled={loginLoading}
                   className="flex-1 bg-gradient-to-r from-[#00f3ff] to-[#9d00ff] text-white font-bold py-2.5 rounded-xl text-xs transition-opacity hover:opacity-90 disabled:opacity-50"
                 >
-                  {loginLoading ? "Saving..." : "Save Credentials"}
+                  {loginLoading ? t("Inahifadhi...", "Saving...") : t("Hifadhi Taarifa", "Save Credentials")}
                 </button>
               </div>
             </form>

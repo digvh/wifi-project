@@ -7,23 +7,34 @@ datasource db {
 }
 
 model Tenant {
-  id            String         @id @default(uuid())
-  name          String
-  slug          String         @unique
-  isActive      Boolean        @default(true)
-  paymentMode   String         @default("MIXED") // MOBILE_ONLY, VOUCHER_ONLY, MIXED
-  createdAt     DateTime       @default(now())
-  users         User[]
-  routers       Router[]
-  packages      Package[]
-  vouchers      Voucher[]
-  payments      Payment[]
-  paymentConfig PaymentConfig?
-  radiusNas     RadiusNas[]
-  deviceSetupRequests DeviceSetupRequest[]
-  sites         Site[]
-  payoutMethods PayoutMethod[]
-  withdrawals   Withdrawal[]
+  id                    String         @id @default(uuid())
+  name                  String
+  slug                  String         @unique
+  isActive              Boolean        @default(true)
+  paymentMode           String         @default("MIXED") // MOBILE_ONLY, VOUCHER_ONLY, MIXED
+  subscriptionPlan      String         @default("POAFI_PAY_COMMISSION") // POAFI_PAY_COMMISSION, STARTER_1_SITE, GROWTH_MULTI_SITE, ENTERPRISE_UNLIMITED
+  subscriptionStatus    String         @default("NONE") // NONE, ACTIVE, EXPIRED
+  subscriptionExpiresAt DateTime?
+  subscriptionMaxSites  Int            @default(1)
+  portalLogoUrl         String?
+  portalColor           String?
+  portalTagline         String?
+  supportPhone          String?
+  createdAt             DateTime       @default(now())
+  users                 User[]
+  routers               Router[]
+  packages              Package[]
+  vouchers              Voucher[]
+  payments              Payment[]
+  paymentConfig         PaymentConfig?
+  gatewaySettings       PaymentGatewaySetting[]
+  subscriptionPayments  SubscriptionPayment[]
+  radiusNas             RadiusNas[]
+  deviceSetupRequests   DeviceSetupRequest[]
+  sites                 Site[]
+  payoutMethods         PayoutMethod[]
+  withdrawals           Withdrawal[]
+  offerClaims           OfferClaim[]
 }
 
 model User {
@@ -147,24 +158,48 @@ model DeviceSetupRequest {
 }
 
 model Package {
-  id              String    @id @default(uuid())
-  tenantId        String
-  routerId        String?
-  name            String
-  priceTzs        Int
-  durationMinutes Int
-  downloadKbps    Int       @default(3000)
-  uploadKbps      Int       @default(1000)
-  dataLimitMb     Int?
-  type            String    @default("TIME") // TIME, DATA, COMBO, PPPOE
-  validityDays    Int?
+  id               String    @id @default(uuid())
+  tenantId         String
+  routerId         String?
+  name             String
+  priceTzs         Int
+  durationMinutes  Int
+  downloadKbps     Int       @default(3000)
+  uploadKbps       Int       @default(1000)
+  dataLimitMb      Int?
+  type             String    @default("TIME") // TIME, DATA, COMBO, PPPOE
+  validityDays     Int?
+  isOffer          Boolean   @default(false)
+  offerType        String?   // FIRST_TIME_FREE, LIMITED_PROMO, HAPPY_HOUR
+  offerActive      Boolean   @default(true)
+  originalPriceTzs Int?
+  offerEndsAt      DateTime?
 
-  tenant    Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  router    Router?   @relation(fields: [routerId], references: [id])
-  vouchers  Voucher[]
-  payments  Payment[]
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  router      Router?      @relation(fields: [routerId], references: [id])
+  vouchers    Voucher[]
+  payments    Payment[]
+  offerClaims OfferClaim[]
 
   @@index([tenantId])
+}
+
+model OfferClaim {
+  id          String   @id @default(uuid())
+  tenantId    String
+  packageId   String
+  deviceKey   String
+  ipAddress   String?
+  phoneNumber String?
+  voucherCode String?
+  claimedAt   DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, packageId, deviceKey])
+  @@index([tenantId, ipAddress])
+  @@index([tenantId, phoneNumber])
 }
 
 model Voucher {
@@ -228,6 +263,8 @@ model PayoutMethod {
   provider      String   // M-Pesa, Tigo, CRDB, NMB
   accountNumber String
   accountName   String?
+  bankBic       String?
+  transferType  String?  // ACH, EFT, TISS
   isVerified    Boolean  @default(false)
   otpCode       String?
   otpExpiresAt  DateTime?
@@ -315,6 +352,47 @@ model PaymentConfig {
   updatedAt         DateTime @updatedAt
 
   tenant            Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+model PaymentGatewaySetting {
+  id                   String    @id @default(uuid())
+  tenantId             String
+  provider             String    // POAFI_PAY, AZAMPAY, CLICKPESA, SNIPPE, PESAPAL, PALMPESA
+  isEnabled            Boolean   @default(false)
+  environment          String    @default("PRODUCTION") // PRODUCTION | SANDBOX
+  encryptedCredentials String?   @db.Text
+  lastTestedAt         DateTime?
+  lastTestStatus       String?   // OK | FAILED
+  lastTestMessage      String?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  tenant               Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+}
+
+model SubscriptionPayment {
+  id          String    @id @default(uuid())
+  tenantId    String
+  planId      String    // STARTER_1_SITE, GROWTH_MULTI_SITE, ENTERPRISE_UNLIMITED
+  months      Int       @default(1)
+  amountTzs   Int
+  provider    String    @default("MPESA")
+  phoneNumber String
+  reference   String    @unique
+  externalId  String?
+  status      String    @default("PENDING") // PENDING, SUCCESS, FAILED
+  periodStart DateTime?
+  periodEnd   DateTime?
+  createdAt   DateTime  @default(now())
+  completedAt DateTime?
+
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
 }
 
 model OperatorApplication {
