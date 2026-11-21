@@ -67,7 +67,8 @@ export class WireGuardService {
    * Short 1-line Terminal command that fetches and applies the full .rsc script.
    */
   static generateOneLineFetchCommand(scriptUrl: string): string {
-    return `:do { /tool fetch url="${scriptUrl}" mode=https dst-path=poafi-setup.rsc; :delay 1s; /import poafi-setup.rsc; } on-error={ :put "Setup fetch failed. On RouterOS 7, run: /system/device-mode/update mode=advanced" }`;
+    const mode = scriptUrl.startsWith('http://') ? 'http' : 'https';
+    return `:do { /tool fetch url="${scriptUrl}" mode=${mode} dst-path=poafi-setup.rsc; :delay 1s; /import poafi-setup.rsc; } on-error={ :put "Setup fetch failed. On RouterOS 7, run: /system/device-mode/update mode=advanced" }`;
   }
 
   /**
@@ -206,11 +207,13 @@ ${walledGardenLines}
         ? `${env.PUBLIC_API_URL.replace(/\/$/, '')}/api/enroll`
         : 'https://YOUR_PUBLIC_API_URL/api/enroll';
     const syncUrl = `${enrollBaseUrl}/sync/${routerId}?key=${encodeURIComponent(apiPassword)}`;
+    const syncMode = syncUrl.startsWith('http://') ? 'http' : 'https';
+    const callbackMode = enrollment?.callbackUrl?.startsWith('http://') ? 'http' : 'https';
 
     const httpsSyncSection = `
 # 9. PoaFi HTTPS Cloud Sync Scheduler (Works on Shared Hosting & Behind 4G/NAT without VPS)
 :do { /system scheduler remove [find name="poafi-cloud-sync"] } on-error={}
-/system scheduler add name=poafi-cloud-sync interval=15s start-time=startup policy=ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon on-event=":do { /tool fetch url=\\"${syncUrl}\\" mode=https http-header-field=\\"X-Router-Key: ${apiPassword}\\" dst-path=poafi-sync.rsc; :delay 1s; /import poafi-sync.rsc; } on-error={}" comment="PoaFi HTTPS Cloud Sync"
+/system scheduler add name=poafi-cloud-sync interval=15s start-time=startup policy=ftp,reboot,read,write,policy,test,password,sniff,sensitive,romon on-event=":do { /tool fetch url=\\"${syncUrl}\\" mode=${syncMode} http-header-field=\\"X-Router-Key: ${apiPassword}\\" dst-path=poafi-sync.rsc; :delay 1s; /import poafi-sync.rsc; } on-error={}" comment="PoaFi HTTPS Cloud Sync"
 :put "PoaFi HTTPS Cloud Sync Scheduler (15s) Installed!"
 `;
 
@@ -224,7 +227,7 @@ ${walledGardenLines}
 :local pfIdentity [/system identity get name]
 :local pfVersion [/system resource get version]
 :delay 2s
-/tool fetch url="${enrollment.callbackUrl}" mode=https http-method=post http-header-field="Content-Type: application/json,X-Enrollment-Token: ${enrollment.token}" http-data=("{\\"model\\":\\"" . $pfModel . "\\",\\"serial\\":\\"" . $pfSerial . "\\",\\"identity\\":\\"" . $pfIdentity . "\\",\\"version\\":\\"" . $pfVersion . "\\"}") keep-result=no
+/tool fetch url="${enrollment.callbackUrl}" mode=${callbackMode} http-method=post http-header-field="Content-Type: application/json,X-Enrollment-Token: ${enrollment.token}" http-data=("{\\"model\\":\\"" . $pfModel . "\\",\\"serial\\":\\"" . $pfSerial . "\\",\\"identity\\":\\"" . $pfIdentity . "\\",\\"version\\":\\"" . $pfVersion . "\\"}") keep-result=no
 :put "Device report sent to PoaFi!"
 `
       : '';

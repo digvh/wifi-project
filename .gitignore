@@ -11,6 +11,8 @@ dist/
 .next/
 out/
 poafi-backend/public/
+pc-migration-bundle/
+*.zip
 
 # IDE
 .vscode/
